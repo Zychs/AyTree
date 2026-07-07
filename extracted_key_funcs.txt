@@ -1,0 +1,208 @@
+=== catForExt ===
+function catForExt(ext) {
+      ext = (ext || '').toLowerCase();
+      if (['js','ts','tsx','jsx','py','rb','go','rs','zig','c','cpp','java','cs'].includes(ext)) return 'code';
+      if (['md','txt','rst','adoc'].includes(ext)) return 'doc';
+      if (['json','yaml','yml','toml','ini','cfg','xml','env'].includes(ext)) return 'config';
+      if (['png','jpg','jpeg','gif','svg','webp','ico','mp3','wav','mp4'].includes(ext)) return 'asset';
+      return 'other';
+    }
+
+    // === STATE ===
+    let nodes = [];           // {id, path, name, ext, size, cat, wx, wy, wr, isDir}
+    let view = { tx: 0, ty: 0, scale: 1 };
+    let isDragging = false;
+    let lastX = 0, lastY = 0;
+    let selected = null;
+    let searchTerm = '';
+    let rafId = null;
+    let needsRedraw = true;
+    
+
+=== hashStr ===
+function hashStr(s) {
+      let h = 2166136261;
+      for (let i = 0; i < s.length; i++) {
+        h ^= s.charCodeAt(i);
+        h = Math.imul(h, 16777619);
+      }
+      return (h >>> 0) / 4294967296;
+    }
+
+    function buildNodesFromTree(treeItems) {
+      // treeItems: array from GitHub {path, type, size?}
+      const out = [];
+      const dirCenters = new Map(); // top-level dir -> {x,y}
+
+      // top-level provinces (rough 3x3-ish grid for organic feel)
+      function topCenter(name) {
+        if (dirCenters.has(name)) return dirCenters.get(name);
+        const h = hashStr(name);
+        const col = Math.floor(h * 3);
+        const row = Math.floor((h * 7) % 3);
+        const cx = 0.15 + col * 0.28 + (hashStr(name + 'x') - 0.5) * 0.06;
+        const cy = 0.18 + r
+
+=== fitViewToNodes ===
+function fitViewToNodes() {
+      if (!nodes.length) { view = { tx: 0, ty: 0, scale: 1 }; return; }
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (const n of nodes) {
+        const r = n.wr || 0.02;
+        minX = Math.min(minX, n.wx - r);
+        minY = Math.min(minY, n.wy - r);
+        maxX = Math.max(maxX, n.wx + r);
+        maxY = Math.max(maxY, n.wy + r);
+      }
+      const pad = 0.08;
+      const w = Math.max(0.01, maxX - minX + pad * 2);
+      const h = Math.max(0.01, maxY - minY + pad * 2);
+      const cx = (minX + maxX) / 2;
+      const cy = (minY + maxY) / 2;
+
+      const rect = canvasEl.getBoundingClientRect();
+      const availW = rect.width || 800;
+      const availH = rect.height || 600;
+      const s = Math.min(
+
+=== buildNodesLayout ===
+function buildNodesLayout() {
+      // Lightweight positions for any supporting file nodes (for "what was added" metadata only).
+      // No size-based radii or storage encoding. Pure presence for the timeline layers.
+      const dirCenters = new Map();
+      function topCenter(name) {
+        if (dirCenters.has(name)) return dirCenters.get(name);
+        const h = hashStr(name);
+        const col = Math.floor(h * 3);
+        const row = Math.floor((h * 7) % 3);
+        const c = { x: 0.15 + col * 0.28, y: 0.18 + row * 0.26 };
+        dirCenters.set(name, c);
+        return c;
+      }
+      nodes.forEach(n => {
+        const top = (n.path.split('/')[0] || 'root');
+        const c = topCenter(top);
+        const h = hashStr(n.path + 'j');
+        const jr = n.isDir ? 0.04 :
+
+=== buildGraphLayout ===
+function buildGraphLayout() {
+      // Simple spatial 2D DAG layout: columns (lanes) for parallel branches, y = reverse chrono
+      graphNodes = [];
+      const shaToNode = {};
+      const laneAlloc = []; // active lanes
+
+      // topo-ish order (commits are oldest first)
+      commits.forEach((c, idx) => {
+        let lane = 0;
+        // prefer parent's lane or find free
+        if (c.parents.length > 0) {
+          const pNode = shaToNode[c.parents[0]];
+          if (pNode) lane = pNode.lane;
+        }
+        // simple collision avoid for multiple parents / branches
+        while (laneAlloc[lane] && laneAlloc[lane] > idx - 3) lane++;
+        laneAlloc[lane] = idx;
+
+        const wx = 0.12 + lane * 0.18 + (hashStr(c.sha) - 0.5) * 0.03; // slight jitter for "spatial" o
+
+=== drawGraph ===
+function drawGraph() {
+      if (!graphCtx || !graphNodes.length) return;
+      const w = graphEl.width / (window.devicePixelRatio || 1);
+      const h = graphEl.height / (window.devicePixelRatio || 1);
+
+      graphCtx.fillStyle = 'rgba(23,21,13,0.95)';
+      graphCtx.fillRect(0, 0, w, h);
+
+      const gscale = graphView.scale;
+      const gtx = graphView.tx;
+      const gty = graphView.ty;
+
+      function g2s(wx, wy) {
+        return { x: wx * 380 * gscale + gtx, y: wy * 180 * gscale + gty };
+      }
+
+      // edges first (parent links)
+      graphCtx.strokeStyle = THEME.line;
+      graphCtx.lineWidth = 1.2;
+      graphNodes.forEach(gn => {
+        gn.parents.forEach(pSha => {
+          const p = graphNodes.find(x => x.sha === pSha);
+          if (!p) return;
+      
+
+=== draw ===
+function drawGraph() {
+      if (!graphCtx || !graphNodes.length) return;
+      const w = graphEl.width / (window.devicePixelRatio || 1);
+      const h = graphEl.height / (window.devicePixelRatio || 1);
+
+      graphCtx.fillStyle = 'rgba(23,21,13,0.95)';
+      graphCtx.fillRect(0, 0, w, h);
+
+      const gscale = graphView.scale;
+      const gtx = graphView.tx;
+      const gty = graphView.ty;
+
+      function g2s(wx, wy) {
+        return { x: wx * 380 * gscale + gtx, y: wy * 180 * gscale + gty };
+      }
+
+      // edges first (parent links)
+      graphCtx.strokeStyle = THEME.line;
+      graphCtx.lineWidth = 1.2;
+      graphNodes.forEach(gn => {
+        gn.parents.forEach(pSha => {
+          const p = graphNodes.find(x => x.sha === pSha);
+          if (!p) return;
+      
+
+=== scheduleDraw ===
+function scheduleDraw() {
+      needsRedraw = true;
+      if (rafId) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        if (needsRedraw) draw();
+        if (showGraph && graphCtx) drawGraph();
+      });
+    }
+
+    // === INTERACTION (highly responsive, direct) ===
+    function screenToWorld(sx, sy) {
+      return {
+        wx: (sx - view.tx) / view.scale,
+        wy: (sy - view.ty) / view.scale
+      };
+    }
+
+    function hitTest(sx, sy) {
+      const { wx, wy } = screenToWorld(sx, sy);
+      let best = null;
+      let bestDist = Infinity;
+      for (const n of nodes) {
+        const dx = n.wx - wx;
+        const dy = n.wy - wy;
+        const dist = Math.hypot(dx, dy);
+        const r = (n.wr || 0.015) * 1.6; // generous hit for dys
+
+NOTFOUND pickRepo
+NOTFOUND onpointerdown
+NOTFOUND keydown
+NOTFOUND loadRepoFromHandle
+=== walkWorkingTreeForSpatial ===
+function walkWorkingTreeForSpatial(dirHandle, prefix, out, depth) {
+      if (depth > 8) return; // safety
+      for await (const [name, handle] of dirHandle.entries()) {
+        if (name === '.git') continue;
+        const path = prefix ? prefix + '/' + name : name;
+        if (handle.kind === 'directory') {
+          out.push({ id: path, path, name, ext: '', size: 0, cat: 'other', wx: 0, wy: 0, wr: 0.02, isDir: true }); // size field kept only as metadata placeholder (never rendered)
+          await walkWorkingTreeForSpatial(handle, path, out, depth+1);
+        } else {
+          try {
+            const f = await handle.getFile();
+            // size deliberately ignored for the compounding timeline viz
+            const ext = name.includes('.') ? name.split('.').pop().toLowe
+
