@@ -192,9 +192,10 @@ export function sortChildren(nodes) {
 }
 
 /**
- * Pure angle list for a sorted sibling count.
+ * Pure equal-angle list for a sorted sibling count (baseline / tests).
  * Issue #6: no left/right coin-flips — index i maps to a unique angle.
- * Dark-matter gaps (issue #5) replace equal spacing later; θ_bias is fixed only.
+ * Production onion layout uses dark-matter allocation in onion-spacing.js (#5);
+ * this helper stays for simple strips and unit tests.
  *
  * Default θ_bias = -π/2 so index 0 sits at 12 o'clock (canvas y-down: -π/2 is up).
  *
@@ -213,8 +214,8 @@ export function anglesForSortedCount(n, { thetaBias = -Math.PI / 2 } = {}) {
 }
 
 /**
- * Attach layoutIndex + angle from a pre-sorted sibling list.
- * Pure: does not reorder; caller must sortChildren first.
+ * Attach layoutIndex + equal angle from a pre-sorted sibling list.
+ * For onion rings prefer layoutOnionTree / allocateUniverses (issue #5).
  * @template T
  * @param {T[]} sorted
  * @param {{ thetaBias?: number }} [opts]
