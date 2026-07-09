@@ -2,16 +2,20 @@
 
 Thin abstraction so we can experiment with angles (weave, spatial, DAG, radial, hybrids) without big rewrites.
 
-## Interface (see src/viz/renderer.js)
+Superseded in shape by `docs/ARCHITECTURE.md` §2.4: the camera (`view {tx,ty,scale}`) is
+compositor-owned, not per-lens, so `draw`/`hitTest` take `{view}` from the compositor rather
+than each lens holding its own. See `src/lenses/spatial-map.js` for the reference
+implementation of this adapted contract.
+
+## Interface (adapted; see src/lenses/spatial-map.js)
 
 ```js
-class VizRenderer {
-  constructor(canvas, opts)
-  setData(data)          // {nodes, commits, ...}
-  layout()               // compute positions
-  draw()                 // to ctx
-  hitTest(sx, sy)        // -> node or null
-  onEvent(type, ev)      // optional
+class Lens {
+  setData(snapshot)          // RepoSnapshot -> internal nodes
+  layout()                   // compute positions
+  fitView(view, nodes, rect) // mutate compositor-owned view to frame nodes
+  draw(ctx, { view })        // to ctx, using compositor-owned view
+  hitTest(sx, sy, view)      // -> node or null
   resize()
 }
 ```
@@ -22,15 +26,15 @@ class VizRenderer {
 - Respect high-contrast + warm-paper tokens.
 - No motion by default or gated.
 
-## Current Implementations (prototype)
-- Weave + accumulation (main curve, stitches, chaos offsets, growing additions)
-- Spatial presence (jittered clusters)
-- Inset DAG lanes
+## Current Implementations
+- Spatial presence (jittered clusters) — `src/lenses/spatial-map.js`, implemented
+- Weave + accumulation, DAG lanes, radial — stubs only, deferred (`docs/ARCHITECTURE.md` §4);
+  still live as a working prototype in `legacy/harvest/harvested_raw.js` / `legacy/index_tree.html`
 
 ## Adding a new angle (e.g. radial)
-1. Subclass or implement the contract in src/viz/radial.js
+1. Implement the contract in src/lenses/radial-onion.js (stub already present)
 2. Wire in main shell with a mode selector
-3. Share core utils (hash, fit, curve helpers)
-4. Test with same data model
+3. Share core utils (src/model/hash.js, src/compositor/*)
+4. Test with same RepoSnapshot data model
 
-See src/viz/ for examples.
+See src/lenses/ for examples.

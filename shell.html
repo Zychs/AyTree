@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AyTree — modular shell (spatial-map lens)</title>
+  <style>
+    :root {
+      --bg: #0f0e0a;
+      --text: #f4edcf;
+      --muted: #a99f78;
+      --accent: #c2a334;
+      --accent-strong: #e0be3e;
+      --line: rgba(224, 190, 62, 0.22);
+      --card: #17150d;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; width: 100vw; height: 100vh; overflow: hidden; background: var(--bg); color: var(--text); font-family: system-ui, Inter, ui-sans-serif, sans-serif; text-rendering: optimizeLegibility; }
+    canvas { display: block; width: 100%; height: 100%; touch-action: none; background: var(--bg); }
+    .inspector, #status {
+      position: absolute; z-index: 15; font-size: 0.7rem; color: var(--muted);
+      background: rgba(15,14,10,0.85); border: 1px solid var(--line); border-radius: 5px; padding: 4px 7px;
+    }
+    .inspector { bottom: 12px; left: 12px; max-width: 380px; font-size: 0.9rem; line-height: 1.3; display: none; }
+    .inspector.open { display: block; }
+    #status { bottom: 8px; right: 8px; font-size: 0.65rem; pointer-events: none; }
+    #picker-prompt { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(15,14,10,0.7); z-index: 30; font-size: 1rem; text-align: center; }
+    button { pointer-events: auto; padding: 8px 14px; font-size: 0.9rem; background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 4px; cursor: pointer; }
+    button:hover { border-color: var(--accent); }
+  </style>
+</head>
+<body>
+  <canvas id="map"></canvas>
+
+  <div id="inspector" class="inspector">
+    <div id="insp-name" style="font-weight:700; font-size:0.95rem;"></div>
+    <div id="insp-path" style="font-family:monospace; font-size:0.82rem; word-break:break-all;"></div>
+    <div id="insp-meta" style="color:var(--muted); font-size:0.75rem;"></div>
+    <div style="margin-top:6px;"><button id="close-insp">close</button></div>
+  </div>
+
+  <div id="status"></div>
+
+  <div id="picker-prompt">
+    <div style="max-width:520px;">
+      <div style="font-size:1.15rem; margin-bottom:8px;">AyTree — modular shell</div>
+      <div style="margin-bottom:12px;">Select a local git repo dir. Spatial-map lens only in this build — see docs/ARCHITECTURE.md §4 for deferred lenses.</div>
+      <button id="pick-btn">Select local repo dir</button>
+    </div>
+  </div>
+
+  <script type="module">
+    import { Compositor } from './src/compositor/compositor.js';
+    import { RafScheduler } from './src/compositor/raf.js';
+    import { SpatialMapLens } from './src/lenses/spatial-map.js';
+    import { loadSnapshot } from './src/ingest/picker.js';
+
+    const canvas = document.getElementById('map');
+    const statusEl = document.getElementById('status');
+    const insp = document.getElementById('inspector');
+    const inspName = document.getElementById('insp-name');
+    const inspPath = document.getElementById('insp-path');
+    const inspMeta = document.getElementById('insp-meta');
+    const pickerPrompt = document.getElementById('picker-prompt');
+
+    const compositor = new Compositor(canvas);
+    const spatialMap = new SpatialMapLens();
+    compositor.mount(spatialMap);
+
+    const raf = new RafScheduler(() => compositor.present());
+
+    function setStatus(msg) { statusEl.textContent = msg; }
+
+    function resizeAndDraw() {
+      compositor.resize();
+      raf.schedule();
+    }
+
+    function updateInspector(n) {
+      if (!n) {
+        insp.classList.remove('open');
+        return;
+      }
+      inspName.textContent = n.name + (n.isDir ? ' /' : '');
+      inspPath.textContent = n.path;
+      inspMeta.textContent = `${n.cat} • ${n.isDir ? 'directory' : 'file'} • click map or press Esc to close`;
+      insp.classList.add('open');
+    }
+
+    canvas.addEventListener('pointerdown', (e) => {
+      canvas.setPointerCapture(e.pointerId);
+      canvas.dataset.dragging = '1';
+      canvas.dataset.lastX = e.clientX;
+      canvas.dataset.lastY = e.clientY;
+    });
+    window.addEventListener('pointermove', (e) => {
+      if (canvas.dataset.dragging !== '1') return;
+      const dx = e.clientX - Number(canvas.dataset.lastX);
+      const dy = e.clientY - Number(canvas.dataset.lastY);
+      compositor.pan(dx, dy);
+      canvas.dataset.lastX = e.clientX;
+      canvas.dataset.lastY = e.clientY;
+      raf.schedule();
+    });
+    window.addEventListener('pointerup', () => { canvas.dataset.dragging = '0'; });
+
+    canvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const factor = e.deltaY < 0 ? 1.18 : 1 / 1.18;
+      compositor.zoomAt(e.clientX, e.clientY, factor);
+      raf.schedule();
+    }, { passive: false });
+
+    canvas.addEventListener('click', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const hit = compositor.hitTest(e.clientX - rect.left, e.clientY - rect.top);
+      updateInspector(hit);
+    });
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key.toLowerCase() === 'r') { compositor.fitView(spatialMap.nodes); raf.schedule(); }
+      if (e.key === 'Escape') updateInspector(null);
+    });
+
+    new ResizeObserver(resizeAndDraw).observe(canvas);
+
+    document.getElementById('close-insp').addEventListener('click', () => updateInspector(null));
+
+    document.getElementById('pick-btn').addEventListener('click', async () => {
+      try {
+        setStatus('loading local repo…');
+        const snapshot = await loadSnapshot('local-git');
+        spatialMap.setData(snapshot);
+        pickerPrompt.style.display = 'none';
+        compositor.resize();
+        compositor.fitView(spatialMap.nodes);
+        raf.schedule();
+        setStatus(`${spatialMap.nodes.length} items • ${snapshot.commits.length} commits • ${snapshot.repoPath}`);
+      } catch (e) {
+        setStatus('picker cancelled or failed: ' + (e && e.message ? e.message : e));
+      }
+    });
+
+    resizeAndDraw();
+  </script>
+</body>
+</html>
