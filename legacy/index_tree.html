@@ -1,0 +1,1351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AyTree — the dyslexia-first repository map</title>
+  <style>
+    :root {
+      --bg: #0f0e0a;
+      --bg-soft: #17150d;
+      --text: #f4edcf;
+      --muted: #a99f78;
+      --muted-soft: rgba(169, 159, 120, 0.2);
+      --accent: #c2a334;
+      --accent-strong: #e0be3e;
+      --line: rgba(224, 190, 62, 0.18);
+      --card: #17150d;
+      --folder-color: #e8c55c;
+      --branch-local: #51a351;
+      --branch-remote: #4a90e2;
+      --virtual-color: #9b59b6;
+      --file-color: #a99f78;
+      
+      /* Status Colors */
+      --status-todo: #c2a334;
+      --status-in-progress: #3498db;
+      --status-blocked: #e74c3c;
+      --status-completed: #2ecc71;
+    }
+
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0;
+      width: 100vw; height: 100vh;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    /* main app grid layout */
+    .app-container {
+      display: grid;
+      grid-template-columns: 1fr 400px;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    /* left tree pane */
+    .tree-pane {
+      background: var(--bg);
+      border-right: 1px solid var(--line);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .tree-header {
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--line);
+      background: var(--bg-soft);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .brand-section {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .brand-title {
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+      color: var(--accent-strong);
+      margin: 0;
+    }
+
+    .brand-subtitle {
+      font-size: 0.72rem;
+      color: var(--muted);
+      margin: 2px 0 0 0;
+    }
+
+    .search-bar {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .search-input {
+      width: 100%;
+      background: rgba(15, 14, 10, 0.6);
+      color: var(--text);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-size: 0.85rem;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .search-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(194, 163, 52, 0.2);
+    }
+
+    .search-shortcut {
+      position: absolute;
+      right: 12px;
+      font-size: 0.7rem;
+      color: var(--muted);
+      background: var(--bg-soft);
+      border: 1px solid var(--line);
+      padding: 2px 5px;
+      border-radius: 4px;
+      pointer-events: none;
+    }
+
+    .tree-scroller {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px;
+    }
+
+    /* right inspector pane */
+    .inspector-pane {
+      background: var(--bg-soft);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow-y: auto;
+      border-left: 1px solid var(--line);
+    }
+
+    .inspector-header {
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(15, 14, 10, 0.2);
+    }
+
+    .inspector-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--text);
+      word-break: break-all;
+      margin: 0;
+    }
+
+    .inspector-type {
+      font-size: 0.75rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-top: 4px;
+    }
+
+    .inspector-body {
+      padding: 24px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    /* CSS tree rendering styles */
+    ul.tree-node-list {
+      list-style: none;
+      padding-left: 20px;
+      margin: 4px 0;
+      position: relative;
+    }
+
+    ul.tree-node-list::before {
+      content: '';
+      position: absolute;
+      left: 6px;
+      top: 0;
+      bottom: 10px;
+      width: 1px;
+      background: var(--line);
+    }
+
+    /* Remove root node line left alignment offset */
+    .tree-scroller > ul.tree-node-list {
+      padding-left: 0;
+    }
+    .tree-scroller > ul.tree-node-list::before {
+      display: none;
+    }
+
+    li.tree-node-item {
+      margin: 2px 0;
+      position: relative;
+    }
+
+    /* Horizontal node link line */
+    li.tree-node-item::before {
+      content: '';
+      position: absolute;
+      left: -14px;
+      top: 13px;
+      width: 10px;
+      height: 1px;
+      background: var(--line);
+    }
+
+    .tree-scroller > ul.tree-node-list > li.tree-node-item::before {
+      display: none;
+    }
+
+    .node-row {
+      display: flex;
+      align-items: center;
+      padding: 5px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      user-select: none;
+      transition: background-color 0.15s, color 0.15s;
+      font-size: 0.88rem;
+    }
+
+    .node-row:hover {
+      background: rgba(194, 163, 52, 0.08);
+    }
+
+    .node-row.selected {
+      background: rgba(194, 163, 52, 0.15);
+      border-left: 3px solid var(--accent);
+      padding-left: 5px; /* adjust for border */
+    }
+
+    /* Node expansion toggle button */
+    .node-toggle {
+      width: 16px;
+      height: 16px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-right: 4px;
+      color: var(--muted);
+      font-size: 0.7rem;
+      transition: transform 0.15s;
+    }
+
+    .node-toggle.collapsed {
+      transform: rotate(-90deg);
+    }
+
+    .node-toggle.leaf {
+      visibility: hidden;
+    }
+
+    .node-icon {
+      margin-right: 8px;
+      font-size: 1rem;
+      display: inline-block;
+    }
+
+    .node-name {
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-right: 8px;
+    }
+
+    /* Highlight matching terms on search */
+    .highlight {
+      background: rgba(224, 190, 62, 0.35);
+      color: #fff;
+      border-radius: 2px;
+      padding: 0 2px;
+    }
+
+    /* Badges & Pills */
+    .badge {
+      font-size: 0.68rem;
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }
+
+    .badge-status {
+      border: 1px solid transparent;
+    }
+    .badge-status.todo {
+      color: var(--status-todo);
+      border-color: rgba(194, 163, 52, 0.3);
+      background: rgba(194, 163, 52, 0.05);
+    }
+    .badge-status.in_progress {
+      color: var(--status-in-progress);
+      border-color: rgba(52, 152, 219, 0.3);
+      background: rgba(52, 152, 219, 0.05);
+    }
+    .badge-status.blocked {
+      color: var(--status-blocked);
+      border-color: rgba(231, 76, 60, 0.3);
+      background: rgba(231, 76, 60, 0.05);
+    }
+    .badge-status.completed {
+      color: var(--status-completed);
+      border-color: rgba(46, 204, 113, 0.3);
+      background: rgba(46, 204, 113, 0.05);
+    }
+
+    .badge-current-head {
+      background: rgba(81, 163, 81, 0.15);
+      color: var(--branch-local);
+      border: 1px solid rgba(81, 163, 81, 0.4);
+      margin-left: 6px;
+    }
+
+    /* Inspector fields and forms */
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .form-label {
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .status-select-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+
+    .status-btn {
+      background: var(--bg);
+      border: 1px solid var(--line);
+      color: var(--muted);
+      padding: 8px;
+      border-radius: 6px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+      text-align: center;
+    }
+
+    .status-btn:hover {
+      background: rgba(194, 163, 52, 0.05);
+      border-color: var(--accent);
+      color: var(--text);
+    }
+
+    .status-btn.active.todo {
+      background: rgba(194, 163, 52, 0.15);
+      border-color: var(--status-todo);
+      color: var(--status-todo);
+    }
+    .status-btn.active.in_progress {
+      background: rgba(52, 152, 219, 0.15);
+      border-color: var(--status-in-progress);
+      color: var(--status-in-progress);
+    }
+    .status-btn.active.blocked {
+      background: rgba(231, 76, 60, 0.15);
+      border-color: var(--status-blocked);
+      color: var(--status-blocked);
+    }
+    .status-btn.active.completed {
+      background: rgba(46, 204, 113, 0.15);
+      border-color: var(--status-completed);
+      color: var(--status-completed);
+    }
+
+    .notes-textarea {
+      width: 100%;
+      height: 180px;
+      background: var(--bg);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      color: var(--text);
+      padding: 10px 12px;
+      font-size: 0.88rem;
+      line-height: 1.4;
+      resize: vertical;
+      outline: none;
+      font-family: inherit;
+    }
+
+    .notes-textarea:focus {
+      border-color: var(--accent);
+    }
+
+    /* General buttons */
+    .btn {
+      padding: 10px 16px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: background-color 0.15s, transform 0.1s;
+      border: none;
+    }
+
+    .btn:active {
+      transform: scale(0.98);
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: var(--bg);
+    }
+
+    .btn-primary:hover {
+      background: var(--accent-strong);
+    }
+
+    .btn-secondary {
+      background: transparent;
+      border: 1px solid var(--line);
+      color: var(--text);
+    }
+
+    .btn-secondary:hover {
+      background: var(--muted-soft);
+      border-color: var(--accent);
+    }
+
+    .btn-danger {
+      background: rgba(231, 76, 60, 0.15);
+      border: 1px solid rgba(231, 76, 60, 0.4);
+      color: #e74c3c;
+    }
+
+    .btn-danger:hover {
+      background: rgba(231, 76, 60, 0.25);
+    }
+
+    .action-group {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 10px;
+      border-top: 1px solid var(--line);
+      padding-top: 20px;
+    }
+
+    /* Extender sub-forms inside inspector */
+    .extender-form {
+      background: var(--bg);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .extender-form-title {
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .extender-input {
+      background: var(--bg-soft);
+      border: 1px solid var(--line);
+      color: var(--text);
+      padding: 6px 10px;
+      border-radius: 4px;
+      font-size: 0.85rem;
+      outline: none;
+    }
+
+    .extender-input:focus {
+      border-color: var(--accent);
+    }
+
+    /* Info cards */
+    .info-card {
+      background: rgba(194, 163, 52, 0.04);
+      border: 1px dashed var(--line);
+      border-radius: 6px;
+      padding: 12px;
+      font-size: 0.8rem;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
+    .info-card strong {
+      color: var(--text);
+    }
+
+    /* Modal / empty states */
+    .empty-inspector {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      color: var(--muted);
+      padding: 60px 24px;
+      gap: 12px;
+    }
+
+    .empty-icon {
+      font-size: 2.5rem;
+      opacity: 0.5;
+    }
+
+    .empty-text {
+      font-size: 0.88rem;
+      max-width: 240px;
+    }
+
+    /* Collapse child container animation/state */
+    .collapsed-container {
+      display: none;
+    }
+
+    /* Scrollbar Styling */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: var(--bg);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: var(--line);
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--accent);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="app-container">
+    
+    <!-- LEFT: Tree map explorer -->
+    <div class="tree-pane">
+      <div class="tree-header">
+        <div class="brand-section">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <svg width="30" height="30" viewBox="0 0 100 100" aria-hidden="true" style="flex-shrink: 0;">
+              <g fill="none" stroke="var(--accent-strong)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 84 L50 26"/><path d="M78 84 L50 26"/>
+                <path d="M22 84 L15 93"/><path d="M22 84 L27 94"/>
+                <path d="M78 84 L85 93"/><path d="M78 84 L73 94"/>
+                <path d="M34 60 L66 60"/>
+              </g>
+              <g fill="none" stroke="var(--branch-local)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M50 26 L40 13"/><path d="M50 26 L60 13"/><path d="M50 26 L50 8"/>
+              </g>
+              <circle cx="50" cy="60" r="5" fill="var(--accent-strong)"/>
+              <g fill="var(--branch-local)"><circle cx="40" cy="13" r="3.5"/><circle cx="60" cy="13" r="3.5"/><circle cx="50" cy="8" r="3.5"/></g>
+            </svg>
+            <div>
+              <h1 class="brand-title">AyTree</h1>
+              <p class="brand-subtitle">the dyslexia-first repository map</p>
+            </div>
+          </div>
+          <div id="connection-status" class="badge" style="background: rgba(46, 204, 113, 0.15); color: var(--status-completed); border: 1px solid rgba(46, 204, 113, 0.3);">Connected</div>
+        </div>
+        
+        <div class="search-bar">
+          <input type="text" id="search-input" class="search-input" placeholder="Search files, branches, or notes... (Press '/' to focus)">
+          <span class="search-shortcut">/</span>
+        </div>
+      </div>
+      
+      <div class="tree-scroller" id="tree-container">
+        <!-- Tree dynamically rendered here -->
+        <div style="text-align:center; padding: 40px; color: var(--muted);">Loading file and branch tree...</div>
+      </div>
+    </div>
+    
+    <!-- RIGHT: Inspector Panel -->
+    <div class="inspector-pane" id="inspector-container">
+      <div class="empty-inspector">
+        <div class="empty-icon">🌿</div>
+        <div class="empty-text">Click any repository, folder, file, branch, or custom milestone to view metadata, add notes, and map your progress.</div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // Global State
+    let treeData = null;
+    let selectedNode = null;
+    let expandedPaths = new Set();
+    let currentSearchTerm = '';
+
+    // Load expanded paths from localStorage
+    try {
+      const saved = localStorage.getItem('intuitree_expanded');
+      if (saved) {
+        expandedPaths = new Set(JSON.parse(saved));
+      }
+    } catch (e) {
+      console.warn("Could not load expanded state: ", e);
+    }
+
+    // Helper: Save expanded paths
+    function saveExpandedState() {
+      try {
+        localStorage.setItem('intuitree_expanded', JSON.stringify(Array.from(expandedPaths)));
+      } catch (e) {
+        console.warn("Could not save expanded state: ", e);
+      }
+    }
+
+    // Fetch latest tree data from backend server
+    async function fetchTreeData() {
+      try {
+        const response = await fetch('/api/tree');
+        if (!response.ok) throw new Error('API request failed');
+        treeData = await response.json();
+        
+        // Ensure root node path is expanded by default
+        if (treeData && treeData.path) {
+          expandedPaths.add(treeData.path);
+        }
+        
+        renderTree();
+        
+        // Maintain active selection
+        if (selectedNode) {
+          const fresh = findNodeByPathOrKey(treeData, selectedNode.path, selectedNode.key || selectedNode.id);
+          if (fresh) {
+            selectNode(fresh, false);
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching tree data:", err);
+        document.getElementById('tree-container').innerHTML = `
+          <div style="color: var(--status-blocked); padding: 20px; border: 1px dashed var(--line); border-radius: 6px; text-align: center;">
+            <strong>Connection Failed</strong><br>
+            <span style="font-size: 0.8rem; color: var(--muted);">Could not reach the local python server. Make sure intuitree_server.py is running.</span>
+            <button class="btn btn-secondary" style="margin-top: 12px; width: 100%;" onclick="fetchTreeData()">Retry Connection</button>
+          </div>
+        `;
+        document.getElementById('connection-status').textContent = 'Disconnected';
+        document.getElementById('connection-status').style.cssText = 'background: rgba(231, 76, 60, 0.15); color: var(--status-blocked); border: 1px solid rgba(231, 76, 60, 0.3);';
+      }
+    }
+
+    // Recursively find a node by its path, key, or virtual ID
+    function findNodeByPathOrKey(node, path, uniqueId) {
+      if (node.path === path && !uniqueId) return node;
+      if (uniqueId && (node.key === uniqueId || node.id === uniqueId)) return node;
+      
+      if (node.children) {
+        for (const child of node.children) {
+          const result = findNodeByPathOrKey(child, path, uniqueId);
+          if (result) return result;
+        }
+      }
+      return null;
+    }
+
+    // Render tree representation to HTML DOM
+    function renderTree() {
+      const container = document.getElementById('tree-container');
+      if (!treeData) return;
+      
+      container.innerHTML = '';
+      const rootList = document.createElement('ul');
+      rootList.className = 'tree-node-list';
+      
+      rootList.appendChild(createNodeDom(treeData));
+      container.appendChild(rootList);
+    }
+
+    // Build DOM structure for a node recursively
+    function createNodeDom(node) {
+      const li = document.createElement('li');
+      li.className = 'tree-node-item';
+      
+      const row = document.createElement('div');
+      row.className = 'node-row';
+      if (selectedNode && (
+        (selectedNode.path && selectedNode.path === node.path && !node.key && !node.id) || 
+        (node.key && selectedNode.key === node.key) ||
+        (node.id && selectedNode.id === node.id)
+      )) {
+        row.classList.add('selected');
+      }
+
+      // 1. Arrow/Collapse Toggle button
+      const toggle = document.createElement('span');
+      toggle.className = 'node-toggle';
+      
+      const isLeaf = !node.children || node.children.length === 0;
+      if (isLeaf) {
+        toggle.classList.add('leaf');
+      } else {
+        const isCollapsed = !expandedPaths.has(node.path || node.name);
+        if (isCollapsed) {
+          toggle.classList.add('collapsed');
+        }
+        
+        toggle.addEventListener('click', (e) => {
+          e.stopPropagation(); // prevent node selection on arrow click
+          toggleCollapse(node, toggle);
+        });
+      }
+      toggle.innerHTML = '▼';
+      row.appendChild(toggle);
+
+      // 2. Icon determination
+      const icon = document.createElement('span');
+      icon.className = 'node-icon';
+      
+      let nodeColor = '';
+      if (node.type === 'repository') {
+        icon.innerHTML = '📦';
+        nodeColor = 'var(--accent)';
+      } else if (node.type === 'branch_group') {
+        icon.innerHTML = '🎋';
+        nodeColor = 'var(--muted)';
+      } else if (node.type === 'branch_local') {
+        icon.innerHTML = '🌿';
+        nodeColor = 'var(--branch-local)';
+      } else if (node.type === 'branch_remote') {
+        icon.innerHTML = '☁️';
+        nodeColor = 'var(--branch-remote)';
+      } else if (node.type === 'virtual_note') {
+        icon.innerHTML = '📝';
+        nodeColor = 'var(--virtual-color)';
+      } else if (node.type === 'directory') {
+        icon.innerHTML = '📁';
+        nodeColor = 'var(--folder-color)';
+      } else {
+        icon.innerHTML = '📄';
+        nodeColor = 'var(--file-color)';
+      }
+      
+      icon.style.color = nodeColor;
+      row.appendChild(icon);
+
+      // 3. Name Label
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'node-name';
+      nameSpan.style.color = nodeColor;
+      
+      // Filter/Highlight text
+      if (currentSearchTerm) {
+        const idx = node.name.toLowerCase().indexOf(currentSearchTerm);
+        if (idx >= 0) {
+          const before = node.name.substring(0, idx);
+          const match = node.name.substring(idx, idx + currentSearchTerm.length);
+          const after = node.name.substring(idx + currentSearchTerm.length);
+          nameSpan.innerHTML = `${escapeHtml(before)}<span class="highlight">${escapeHtml(match)}</span>${escapeHtml(after)}`;
+          // Auto-expand parents if matching
+          expandParents(node);
+        } else {
+          nameSpan.textContent = node.name;
+        }
+      } else {
+        nameSpan.textContent = node.name;
+      }
+      row.appendChild(nameSpan);
+
+      // 4. Inject current branch pill if active HEAD
+      if (node.is_current) {
+        const headBadge = document.createElement('span');
+        headBadge.className = 'badge badge-current-head';
+        headBadge.textContent = 'Active HEAD';
+        row.appendChild(headBadge);
+      }
+
+      // 5. Progress Status badges next to name
+      if (node.status && node.status !== 'NONE') {
+        const statusBadge = document.createElement('span');
+        statusBadge.className = `badge badge-status ${node.status.toLowerCase()}`;
+        statusBadge.textContent = node.status.replace('_', ' ');
+        row.appendChild(statusBadge);
+      }
+
+      // Row Selection Click Event
+      row.addEventListener('click', () => {
+        selectNode(node, true);
+        
+        // Visual selection updates
+        document.querySelectorAll('.node-row').forEach(r => r.classList.remove('selected'));
+        row.classList.add('selected');
+      });
+
+      li.appendChild(row);
+
+      // 6. Child container if not a leaf
+      if (!isLeaf) {
+        const childContainer = document.createElement('ul');
+        childContainer.className = 'tree-node-list';
+        
+        const isCollapsed = !expandedPaths.has(node.path || node.name);
+        if (isCollapsed) {
+          childContainer.classList.add('collapsed-container');
+        }
+        
+        node.children.forEach(child => {
+          childContainer.appendChild(createNodeDom(child));
+        });
+        li.appendChild(childContainer);
+      }
+
+      return li;
+    }
+
+    // Toggle collapse state on folder click
+    function toggleCollapse(node, toggleElement) {
+      const parentLi = toggleElement.closest('.tree-node-item');
+      const childUl = parentLi.querySelector('ul.tree-node-list');
+      const nodeKey = node.path || node.name;
+      
+      if (expandedPaths.has(nodeKey)) {
+        expandedPaths.delete(nodeKey);
+        toggleElement.classList.add('collapsed');
+        if (childUl) childUl.classList.add('collapsed-container');
+      } else {
+        expandedPaths.add(nodeKey);
+        toggleElement.classList.remove('collapsed');
+        if (childUl) childUl.classList.remove('collapsed-container');
+      }
+      saveExpandedState();
+    }
+
+    // Auto-expand parents of search hits
+    function expandParents(node) {
+      // Walk up or find node in state and add parent paths to expandedPaths
+      // Since tree structure is loaded fully, we can gather ancestral paths of matching nodes
+      if (!treeData) return;
+      const paths = [];
+      
+      function searchParents(cur, targetPathOrKey, ancestralPaths) {
+        if ((cur.path === targetPathOrKey && !cur.key) || cur.key === targetPathOrKey || cur.id === targetPathOrKey) {
+          paths.push(...ancestralPaths);
+          return true;
+        }
+        if (cur.children) {
+          for (const c of cur.children) {
+            const nextAncestral = [...ancestralPaths, cur.path || cur.name];
+            if (searchParents(c, targetPathOrKey, nextAncestral)) return true;
+          }
+        }
+        return false;
+      }
+      
+      searchParents(treeData, node.path || node.key || node.id, []);
+      paths.forEach(p => expandedPaths.add(p));
+    }
+
+    // Select a node and display info in inspector pane
+    function selectNode(node, animate = true) {
+      selectedNode = node;
+      const container = document.getElementById('inspector-container');
+      
+      // Determine user-friendly type title
+      let nodeTypeTitle = node.type;
+      let parentPath = getParentPath(node);
+      
+      if (node.type === 'repository') nodeTypeTitle = 'Git Repository';
+      if (node.type === 'directory') nodeTypeTitle = 'Subdirectory Folder';
+      if (node.type === 'file') nodeTypeTitle = 'File Asset';
+      if (node.type === 'branch_local') nodeTypeTitle = 'Local Git Branch';
+      if (node.type === 'branch_remote') nodeTypeTitle = 'Remote Tracking Branch';
+      if (node.type === 'branch_group') nodeTypeTitle = 'Branches Catalog';
+      if (node.type === 'virtual_note') nodeTypeTitle = 'Planning Milestone / Note';
+
+      let html = `
+        <div class="inspector-header">
+          <h2 class="inspector-title">${escapeHtml(node.name)}</h2>
+          <div class="inspector-type">${nodeTypeTitle}</div>
+        </div>
+        
+        <div class="inspector-body">
+      `;
+
+      // 1. Metadata and Path details
+      if (node.path) {
+        html += `
+          <div class="form-group">
+            <span class="form-label">System Path</span>
+            <div style="font-family: ui-monospace, monospace; font-size: 0.8rem; background: var(--bg); padding: 8px; border-radius: 4px; word-break: break-all; border: 1px solid var(--line);">
+              ${escapeHtml(node.path)}
+            </div>
+          </div>
+        `;
+      }
+
+      // 2. Active branch indicator for Repositories
+      if (node.type === 'repository' && node.current_branch) {
+        html += `
+          <div class="info-card">
+            Active Git Branch: <strong>🌿 ${escapeHtml(node.current_branch)}</strong>
+          </div>
+        `;
+      }
+
+      // 3. Render Status Progress pills (exclude branch group containers)
+      if (node.type !== 'branch_group') {
+        const statuses = [
+          { value: 'TODO', label: 'Todo' },
+          { value: 'IN_PROGRESS', label: 'In Progress' },
+          { value: 'BLOCKED', label: 'Blocked' },
+          { value: 'COMPLETED', label: 'Done' }
+        ];
+
+        html += `
+          <div class="form-group">
+            <span class="form-label">Status Mapping</span>
+            <div class="status-select-grid">
+        `;
+
+        statuses.forEach(st => {
+          const isActive = node.status === st.value;
+          html += `
+            <button class="status-btn ${isActive ? 'active ' + st.value.toLowerCase() : ''}" 
+                    onclick="updateNodeStatus('${st.value}')">
+              ${st.label}
+            </button>
+          `;
+        });
+
+        html += `
+            </div>
+          </div>
+        `;
+
+        // 4. Notes Text Area Editor
+        html += `
+          <div class="form-group">
+            <span class="form-label">Progress & Developer Notes</span>
+            <textarea id="notes-input" class="notes-textarea" placeholder="Add custom thoughts, steps to cover, tasks finished, or blocking issues here..." oninput="autoSaveNotes()">${escapeHtml(node.notes || '')}</textarea>
+            <div style="font-size: 0.72rem; color: var(--muted); text-align: right; margin-top: 2px;" id="save-status">Saved automatically</div>
+          </div>
+        `;
+      }
+
+      // 5. Actions group ("Add Milestones", "Create folders", etc.)
+      html += `<div class="action-group">`;
+      
+      if (node.type === 'directory' || node.type === 'repository') {
+        html += `
+          <button class="btn btn-secondary" style="width: 100%;" onclick="toggleExtenderForm('folder')">📁 Create Subfolder</button>
+          <div id="extender-folder-form" class="extender-form" style="display: none;">
+            <div class="extender-form-title">New Directory Under ${escapeHtml(node.name)}</div>
+            <input type="text" id="ext-folder-name" class="extender-input" placeholder="folder-name-here">
+            <button class="btn btn-primary" style="padding: 6px 12px; font-size: 0.8rem;" onclick="createFolder()">Create Folder</button>
+          </div>
+        `;
+      }
+      
+      if (node.type === 'repository') {
+        html += `
+          <button class="btn btn-secondary" style="width: 100%;" onclick="toggleExtenderForm('branch')">🌿 Create New Branch</button>
+          <div id="extender-branch-form" class="extender-form" style="display: none;">
+            <div class="extender-form-title">Initialize Local Git Branch</div>
+            <input type="text" id="ext-branch-name" class="extender-input" placeholder="feature/your-branch-name">
+            <button class="btn btn-primary" style="padding: 6px 12px; font-size: 0.8rem;" onclick="createBranch()">Create Branch</button>
+          </div>
+        `;
+      }
+
+      // Virtual planning milestones
+      if (node.type !== 'branch_group' && node.type !== 'virtual_note') {
+        html += `
+          <button class="btn btn-secondary" style="width: 100%;" onclick="toggleExtenderForm('virtual')">📝 Add Planning Milestone/Note</button>
+          <div id="extender-virtual-form" class="extender-form" style="display: none;">
+            <div class="extender-form-title">Add Virtual Note/Subtask</div>
+            <input type="text" id="ext-virtual-name" class="extender-input" placeholder="Task: Refactor tests...">
+            <button class="btn btn-primary" style="padding: 6px 12px; font-size: 0.8rem;" onclick="createVirtualNode()">Add Note</button>
+          </div>
+        `;
+      }
+
+      // If it's a virtual node itself, allow editing name or deleting
+      if (node.type === 'virtual_note') {
+        html += `
+          <div class="form-group">
+            <span class="form-label">Rename Milestone</span>
+            <input type="text" id="virtual-rename-input" class="extender-input" value="${escapeHtml(node.name)}" oninput="renameVirtualNode()">
+          </div>
+          <button class="btn btn-danger" style="width: 100%; margin-top: 10px;" onclick="deleteVirtualNode()">🗑️ Delete Note</button>
+        `;
+      }
+
+      html += `</div></div>`; // End of body
+      container.innerHTML = html;
+    }
+
+    // Helper: Determine node parent path
+    function getParentPath(node) {
+      if (node.rel_path) {
+        const parts = node.rel_path.split('/');
+        parts.pop();
+        return parts.join('/');
+      }
+      return '';
+    }
+
+    // Toggle extender sub-form visibilities
+    function toggleExtenderForm(formType) {
+      const form = document.getElementById(`extender-${formType}-form`);
+      if (form) {
+        const isHidden = form.style.display === 'none';
+        // Hide all forms first
+        document.querySelectorAll('.extender-form').forEach(f => f.style.display = 'none');
+        form.style.display = isHidden ? 'flex' : 'none';
+        
+        // Auto-focus inputs
+        if (isHidden) {
+          const input = form.querySelector('input');
+          if (input) input.focus();
+        }
+      }
+    }
+
+    // Auto save notes on text typing (debounce)
+    let autoSaveTimeout = null;
+    function autoSaveNotes() {
+      const statusLabel = document.getElementById('save-status');
+      if (statusLabel) statusLabel.textContent = 'Saving...';
+      
+      clearTimeout(autoSaveTimeout);
+      autoSaveTimeout = setTimeout(async () => {
+        const notesValue = document.getElementById('notes-input').value;
+        const key = selectedNode.rel_path !== undefined ? selectedNode.rel_path : (selectedNode.key || selectedNode.id);
+        const isVirtual = selectedNode.type === 'virtual_note';
+        
+        const payload = {
+          key: key,
+          notes: notesValue,
+          status: selectedNode.status || 'NONE',
+          is_virtual: isVirtual
+        };
+
+        if (isVirtual) {
+          // Find virtual node parent
+          payload.parent_key = getVirtualParentKey(selectedNode.id);
+          payload.name = selectedNode.name;
+        }
+
+        try {
+          const res = await fetch('/api/notes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          const result = await res.json();
+          if (result.success) {
+            selectedNode.notes = notesValue;
+            if (statusLabel) statusLabel.textContent = 'Saved';
+          } else {
+            if (statusLabel) statusLabel.textContent = 'Save Error: ' + result.error;
+          }
+        } catch (e) {
+          if (statusLabel) statusLabel.textContent = 'Network Error';
+        }
+      }, 500);
+    }
+
+    // Update active node's status tag
+    async function updateNodeStatus(statusValue) {
+      // Toggle off if clicking the active one
+      const targetStatus = selectedNode.status === statusValue ? 'NONE' : statusValue;
+      const key = selectedNode.rel_path !== undefined ? selectedNode.rel_path : (selectedNode.key || selectedNode.id);
+      const isVirtual = selectedNode.type === 'virtual_note';
+      
+      const payload = {
+        key: key,
+        notes: selectedNode.notes || '',
+        status: targetStatus,
+        is_virtual: isVirtual
+      };
+
+      if (isVirtual) {
+        payload.parent_key = getVirtualParentKey(selectedNode.id);
+        payload.name = selectedNode.name;
+      }
+
+      try {
+        const res = await fetch('/api/notes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const result = await res.json();
+        if (result.success) {
+          selectedNode.status = targetStatus;
+          
+          // Re-sync tree structure from backend to show new status badge
+          await fetchTreeData();
+        } else {
+          alert('Failed to update status: ' + result.error);
+        }
+      } catch (e) {
+        alert('Network Error while updating status');
+      }
+    }
+
+    // Find parent container key of a virtual node
+    function getVirtualParentKey(nodeId) {
+      let foundKey = 'root';
+      
+      function search(cur) {
+        if (cur.children) {
+          for (const c of cur.children) {
+            if (c.id === nodeId && c.type === 'virtual_note') {
+              foundKey = cur.rel_path !== undefined ? cur.rel_path : 'root';
+              return true;
+            }
+            if (search(c)) return true;
+          }
+        }
+        return false;
+      }
+      
+      if (treeData) search(treeData);
+      return foundKey;
+    }
+
+    // Physical Folder creation
+    async function createFolder() {
+      const folderInput = document.getElementById('ext-folder-name');
+      const folderName = folderInput.value.trim();
+      if (!folderName) return alert('Folder name cannot be empty');
+      
+      try {
+        const res = await fetch('/api/extend', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'create_folder',
+            parent_path: selectedNode.path,
+            folder_name: folderName
+          })
+        });
+        const result = await res.json();
+        if (result.success) {
+          folderInput.value = '';
+          toggleExtenderForm('folder');
+          expandedPaths.add(selectedNode.path || selectedNode.name); // Ensure parent is expanded
+          await fetchTreeData();
+        } else {
+          alert('Error: ' + result.error);
+        }
+      } catch (e) {
+        alert('Network Error while creating folder');
+      }
+    }
+
+    // Physical Git branch creation
+    async function createBranch() {
+      const branchInput = document.getElementById('ext-branch-name');
+      const branchName = branchInput.value.trim();
+      if (!branchName) return alert('Branch name cannot be empty');
+      
+      try {
+        const res = await fetch('/api/extend', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'create_branch',
+            repo_path: selectedNode.path,
+            branch_name: branchName
+          })
+        });
+        const result = await res.json();
+        if (result.success) {
+          branchInput.value = '';
+          toggleExtenderForm('branch');
+          expandedPaths.add(selectedNode.path || selectedNode.name); // expand repo
+          // Also try expanding branches node group if we find it
+          await fetchTreeData();
+        } else {
+          alert('Error: ' + result.error);
+        }
+      } catch (e) {
+        alert('Network Error while creating branch');
+      }
+    }
+
+    // Create a virtual planning subtask/note
+    async function createVirtualNode() {
+      const virtualInput = document.getElementById('ext-virtual-name');
+      const virtualName = virtualInput.value.trim();
+      if (!virtualName) return alert('Milestone name cannot be empty');
+      
+      const parentKey = selectedNode.rel_path !== undefined ? selectedNode.rel_path : 'root';
+      const syntheticId = 'virtual-' + Date.now();
+      
+      try {
+        const res = await fetch('/api/notes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            key: syntheticId,
+            name: virtualName,
+            notes: '',
+            status: 'NONE',
+            is_virtual: true,
+            parent_key: parentKey
+          })
+        });
+        const result = await res.json();
+        if (result.success) {
+          virtualInput.value = '';
+          toggleExtenderForm('virtual');
+          expandedPaths.add(selectedNode.path || selectedNode.name); // ensure expanded
+          await fetchTreeData();
+        } else {
+          alert('Error: ' + result.error);
+        }
+      } catch (e) {
+        alert('Network Error while adding milestone');
+      }
+    }
+
+    // Rename a virtual node in real-time
+    let renameTimeout = null;
+    function renameVirtualNode() {
+      clearTimeout(renameTimeout);
+      const nameInput = document.getElementById('virtual-rename-input');
+      const newName = nameInput.value.trim();
+      if (!newName) return;
+      
+      renameTimeout = setTimeout(async () => {
+        const parentKey = getVirtualParentKey(selectedNode.id);
+        try {
+          const res = await fetch('/api/notes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              key: selectedNode.id,
+              name: newName,
+              notes: selectedNode.notes || '',
+              status: selectedNode.status || 'NONE',
+              is_virtual: true,
+              parent_key: parentKey
+            })
+          });
+          const result = await res.json();
+          if (result.success) {
+            selectedNode.name = newName;
+            
+            // Re-sync tree silently or update title
+            const titleEl = document.querySelector('.inspector-title');
+            if (titleEl) titleEl.textContent = newName;
+            
+            // Redraw tree representation to show updated name
+            renderTree();
+          }
+        } catch (e) {
+          console.error("Virtual rename failed:", e);
+        }
+      }, 500);
+    }
+
+    // Delete a virtual milestone node
+    async function deleteVirtualNode() {
+      if (!confirm(`Are you sure you want to delete the milestone "${selectedNode.name}"?`)) return;
+      
+      const parentKey = getVirtualParentKey(selectedNode.id);
+      try {
+        const res = await fetch('/api/extend', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'delete_virtual',
+            id: selectedNode.id,
+            parent_key: parentKey
+          })
+        });
+        const result = await res.json();
+        if (result.success) {
+          // Clear selection
+          document.getElementById('inspector-container').innerHTML = `
+            <div class="empty-inspector">
+              <div class="empty-icon">🌿</div>
+              <div class="empty-text">Click any repository, folder, file, branch, or custom milestone to view metadata, add notes, and map your progress.</div>
+            </div>
+          `;
+          selectedNode = null;
+          await fetchTreeData();
+        } else {
+          alert('Error: ' + result.error);
+        }
+      } catch (e) {
+        alert('Network Error while deleting note');
+      }
+    }
+
+    // Substring Sanitizer
+    function escapeHtml(str) {
+      if (!str) return '';
+      return str.replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+    }
+
+    // Search input handler
+    const searchInput = document.getElementById('search-input');
+    searchInput.addEventListener('input', () => {
+      currentSearchTerm = searchInput.value.trim().toLowerCase();
+      renderTree();
+    });
+
+    // Handle global keyboard shortcuts
+    window.addEventListener('keydown', (e) => {
+      if (e.key === '/' && document.activeElement !== searchInput) {
+        e.preventDefault();
+        searchInput.focus();
+        searchInput.select();
+      }
+      if (e.key === 'Escape') {
+        searchInput.value = '';
+        currentSearchTerm = '';
+        searchInput.blur();
+        renderTree();
+      }
+    });
+
+    // Boot
+    fetchTreeData();
+    
+    // Auto-refresh tree periodically (every 10 seconds) to catch filesystem/git changes
+    setInterval(fetchTreeData, 10000);
+  </script>
+
+</body>
+</html>
