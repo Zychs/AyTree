@@ -3,10 +3,13 @@
  * Spec: docs/specs/radial-rerooting-spec.md
  * Contract: docs/renderer-contract.md (compositor-owned camera)
  *
- * Issue #6 (done here): conflict-free deterministic sibling sort + pure angle
- * assignment from sorted index. Spacing “dark matter” (#5), draw-cull retention
- * (#4), and dash phase (#3) build on this order — do not reintroduce left/right
- * heuristics or Math.random in layout.
+ * Layout stack (deterministic, no inference):
+ *   #6 sort  → total-order siblings (compare-nodes)
+ *   #5 space → dark-matter gaps + proportional sectors (onion-spacing)
+ *   #4 keep  → membership ≠ camera (draw-cull later)
+ *   #3 dash  → phase-offset strokes later
+ *
+ * Prefer empty stretch over packing — see ONION_SPACING + layoutOnionTree.
  */
 import {
   compareNodes,
@@ -15,6 +18,16 @@ import {
   assignAnglesInOrder,
   nodeIdentity,
 } from '../model/compare-nodes.js';
+import {
+  ONION_SPACING,
+  deltaR,
+  thetaMin,
+  layoutOnionTree,
+  allocateUniverses,
+  minRing1EmptyGap,
+  universeWeight,
+  gapBudget,
+} from '../model/onion-spacing.js';
 
 export {
   compareNodes,
@@ -22,6 +35,14 @@ export {
   anglesForSortedCount,
   assignAnglesInOrder,
   nodeIdentity,
+  ONION_SPACING,
+  deltaR,
+  thetaMin,
+  layoutOnionTree,
+  allocateUniverses,
+  minRing1EmptyGap,
+  universeWeight,
+  gapBudget,
 };
 
 /**
@@ -38,20 +59,21 @@ export {
  */
 
 export class RadialOnionLens {
-  constructor() {
+  constructor(spacingOverrides = {}) {
     /** @type {OnionNode|null} */
     this.root = null;
     /** @type {OnionNode|null} */
     this.currentRoot = null;
-    /** Flat list of laid-out nodes (membership for current root; issue #4 keeps full set). */
+    /** Flat list of laid-out nodes (full accessibility set for current root). */
     this.nodes = [];
-    /** @type {string|null} identity of currentRoot */
+    /** @type {string|null} */
     this.rootId = null;
+    /** Optional per-instance spacing overrides (tests / tuning). */
+    this.spacingOverrides = spacingOverrides;
   }
 
   /**
-   * Accept either a tree-shaped root node (`{ children }`) or a RepoSnapshot-like
-   * object with `files[]` (promoted to a synthetic root for early wiring).
+   * Accept a tree-shaped root (`{ children }`) or RepoSnapshot-like `{ files[] }`.
    * @param {OnionNode|{files?: object[], repoPath?: string}|null} snapshotOrTree
    */
   setData(snapshotOrTree) {
@@ -61,7 +83,7 @@ export class RadialOnionLens {
     this.layout();
   }
 
-  /** Click-to-re-root: any node in the laid-out set can become the new root. */
+  /** Click-to-re-root: recompute onion from the chosen node. */
   reRoot(node) {
     if (!node) return;
     this.currentRoot = node;
@@ -70,43 +92,16 @@ export class RadialOnionLens {
   }
 
   /**
-   * Layout over the full accessibility set for currentRoot (direct children only
-   * in this pass — deeper onion rings land with #5 spacing).
-   * Children are always sortChildren'd before angles are assigned.
+   * Full accessibility layout for currentRoot via dark-matter allocator.
+   * Camera never changes membership (issue #4); this always rebuilds the batch.
    */
   layout() {
-    this.nodes = [];
     const root = this.currentRoot;
-    if (!root) return;
-
-    const center = {
-      ...root,
-      layoutIndex: -1,
-      angle: 0,
-      ring: 0,
-      wx: 0,
-      wy: 0,
-      wr: 0.04,
-    };
-    this.nodes.push(center);
-
-    const kids = sortChildren(root.children || []);
-    const placed = assignAnglesInOrder(kids);
-    const ringRadius = 0.35;
-
-    for (const child of placed) {
-      const wx = Math.cos(child.angle) * ringRadius;
-      const wy = Math.sin(child.angle) * ringRadius;
-      this.nodes.push({
-        ...child,
-        ring: 1,
-        wx,
-        wy,
-        wr: 0.02,
-        // preserve sorted children on the node for later rings / legends
-        children: sortChildren(child.children || []),
-      });
+    if (!root) {
+      this.nodes = [];
+      return;
     }
+    this.nodes = layoutOnionTree(root, this.spacingOverrides);
   }
 
   fitView(view, nodes, rect) {
@@ -142,14 +137,46 @@ export class RadialOnionLens {
   }
 
   draw(ctx, { view }) {
-    // Spokes first (parent → ring-1). Dash phase is issue #3; solid for now.
-    const center = this.nodes.find((n) => n.ring === 0);
-    if (center) {
-      const cx = center.wx * view.scale + view.tx;
-      const cy = center.wy * view.scale + view.ty;
+    // Concentric guides (onion layers) — subtle, non-interactive.
+    const rings = new Set(this.nodes.map((n) => n.ring).filter((r) => r > 0));
+    if (rings.size) {
+      const center = this.nodes.find((n) => n.ring === 0);
+      const cx = center ? center.wx * view.scale + view.tx : view.tx;
+      const cy = center ? center.wy * view.scale + view.ty : view.ty;
       ctx.save();
-      ctx.strokeStyle = 'rgba(224, 190, 62, 0.35)';
+      ctx.strokeStyle = 'rgba(224, 190, 62, 0.12)';
       ctx.lineWidth = 1;
+      const r0 = (this.spacingOverrides.R0 ?? ONION_SPACING.R0);
+      const dR = deltaR({ ...ONION_SPACING, ...this.spacingOverrides });
+      for (const ring of rings) {
+        const rr = (r0 + ring * dR) * view.scale;
+        // actual radii may differ slightly if R0+ring*Δr; use max node radius on ring
+        const sample = this.nodes.find((n) => n.ring === ring);
+        const rad = sample
+          ? Math.hypot(sample.wx, sample.wy) * view.scale
+          : rr;
+        ctx.beginPath();
+        ctx.arc(cx, cy, Math.max(1, rad), 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    // Spokes parent→child by ring adjacency (solid; dash phase is #3).
+    ctx.save();
+    ctx.strokeStyle = 'rgba(224, 190, 62, 0.35)';
+    ctx.lineWidth = 1;
+    const byRing = new Map();
+    for (const n of this.nodes) {
+      if (!byRing.has(n.ring)) byRing.set(n.ring, []);
+      byRing.get(n.ring).push(n);
+    }
+    // Connect each node on ring r>0 toward center (root) along its angle —
+    // true parent edges need parent ids; radial spokes still read as onion.
+    const rootN = this.nodes.find((n) => n.ring === 0);
+    if (rootN) {
+      const cx = rootN.wx * view.scale + view.tx;
+      const cy = rootN.wy * view.scale + view.ty;
       for (const n of this.nodes) {
         if (n.ring !== 1) continue;
         const sx = n.wx * view.scale + view.tx;
@@ -159,8 +186,21 @@ export class RadialOnionLens {
         ctx.lineTo(sx, sy);
         ctx.stroke();
       }
-      ctx.restore();
+      // Deeper rings: spoke from parent sector midpoint radius to node
+      for (const n of this.nodes) {
+        if (n.ring < 2) continue;
+        const parentR = Math.hypot(n.wx, n.wy) - deltaR({ ...ONION_SPACING, ...this.spacingOverrides });
+        const px = Math.cos(n.angle) * parentR * view.scale + view.tx;
+        const py = Math.sin(n.angle) * parentR * view.scale + view.ty;
+        const sx = n.wx * view.scale + view.tx;
+        const sy = n.wy * view.scale + view.ty;
+        ctx.beginPath();
+        ctx.moveTo(px, py);
+        ctx.lineTo(sx, sy);
+        ctx.stroke();
+      }
     }
+    ctx.restore();
 
     for (const n of this.nodes) {
       const sx = n.wx * view.scale + view.tx;
@@ -209,7 +249,6 @@ function normalizeToTree(input) {
       children: sortChildren(input.children || []),
     };
   }
-  // RepoSnapshot-ish: files[] → synthetic root with file/dir children
   if (Array.isArray(input.files)) {
     const children = input.files.map((f) => ({
       id: f.path || f.name,
