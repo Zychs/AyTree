@@ -4,8 +4,9 @@
 angles as swappable **lenses** over one shared data/model layer — not any single
 prototype evolved forward.*
 
-Status: **Phase 0 (Harvest) skeleton.** Modules below are stubs with ported-source
-provenance, not implementations.
+Status: **Phase 1 in progress.** `src/model/`, `src/compositor/`, `src/ingest/local-git.js`,
+and the `spatial-map` lens are implemented and wired into `shell.html`. `dag-gitgraph.js`,
+`radial-onion.js`, `weave.js`, and `python-scan.js` remain stubs — see §4.
 
 ---
 
@@ -125,12 +126,15 @@ Owner spec: [specs/gui-dyslexia-encode.md](specs/gui-dyslexia-encode.md).
 
 ---
 
-## 4. What Phase 0 delivers vs. defers
+## 4. What's delivered vs. deferred
 
-**Delivered (skeleton):** directory shape, 11 promoted specs, the harvested-function
-[CATALOG.md](CATALOG.md), provenance [HARVEST.md](HARVEST.md), module stubs with port
-targets, this document.
+**Delivered:** directory shape, 11 promoted specs, [CATALOG.md](CATALOG.md),
+[HARVEST.md](HARVEST.md); `src/model/{hash,snapshot}.js`; `src/compositor/{compositor,raf,
+hit-targets,encode}.js`; `src/ingest/{local-git,picker}.js` (real `.git/logs` reflog parse,
+not a stub); `src/lenses/spatial-map.js`; `shell.html` booting picker → ingest → snapshot →
+compositor → spatial-map end to end.
 
-**Deferred to later phases:** actual draw-list ports, the worker/off-thread indexer,
+**Deferred (stub files present, citing CATALOG.md disposition):** `dag-gitgraph.js`,
+`radial-onion.js`, the `weave.js` overlay, `python-scan.js`, the worker/off-thread indexer,
 split-view sandboxing + commit/omit gating (see root `README.md`), LOD controller wiring,
 editing/virtual-node operations (`index_tree.html`).
