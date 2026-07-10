@@ -11,22 +11,28 @@ a coined mark. "intuitree" / "dyslexitree" persist only as internal lens/layer n
 
 ## Repository layout
 
-This repo is the consolidation of two lineages (merged 2026-07-08), now on top of the
-architecture in `docs/ARCHITECTURE.md`:
+As of 2026-07-09: **the tree + status + notes tool is primary**, the canvas lens
+visualizations are optional experiments. Both are real, but only one is a *tool* — see
+`docs/ARCHITECTURE.md`'s changelog for the reasoning.
 
-- **`index.html`** — the original single-file prototype (weave + spatial + DAG inset,
-  inline script). Kept working as a reference until `shell.html` reaches parity.
-- **`shell.html` + `src/`** — the go-forward modular shell, wired to the documented module
-  layout: `src/model/` (RepoSnapshot SSOT), `src/compositor/` (viewport, RAF, hit-testing,
-  dyslexia glyph encoding), `src/ingest/` (picker + local-git adapter; python-scan deferred),
-  `src/lenses/` (pluggable renderers against `docs/renderer-contract.md`). Only the
-  spatial-map lens is implemented so far — weave/DAG/radial are stubs, see
-  `docs/ARCHITECTURE.md` §4.
-- **`server/aytree_server.py`** — the working Python power layer (notes DB, git branch
-  enumeration, `/api/tree` filesystem scan, safe folder/branch mutation). Run from the repo
-  root: `python server/aytree_server.py` → http://localhost:8000/ (legacy monolith at `/legacy`).
-- **`legacy/index_tree.html`** — the mature working monolith (ported from intuitree, branded).
-  The reference implementation until its logic is ported into `src/lenses/`.
+- **`legacy/index_tree.html`** — **the primary experience.** Expandable file tree, per-item
+  status (Todo/In Progress/Blocked/Done), autosaved free-text notes, git branch display.
+  Served at `/` and `/legacy`: `python server/aytree_server.py` → http://localhost:8000/.
+  Despite the `legacy/` path (a naming artifact of the 2026-07-08 merge, not a deprecation
+  signal), this is the one to actually use.
+- **`map.html`** — **radial + directory dual map.** One `RepoSnapshot`, two projections:
+  re-rootable radial-onion starburst and a synchronized expandable directory panel.
+  Self-maps AyTree offline; **From server** uses `python-scan` → `GET /api/tree`;
+  **Open local…** uses the local-git adapter. Served at `/map`.
+- **`shell.html` + `src/`** — **optional, experimental.** Four swappable canvas
+  visualizations of the same repo (`src/lenses/`: spatial-map, dag-gitgraph, radial-onion,
+  weave overlay — switch with keys 1/2/3, toggle weave with `w`; on-screen filter panel;
+  notes/status also readable here via the shared `/api/notes` DB). Served at `/experimental`.
+  Wired to `src/model/` (RepoSnapshot SSOT), `src/compositor/` (viewport, RAF, hit-testing,
+  glyph encoding, lens registry, filters), `src/ingest/` (picker, local-git, python-scan).
+- **`server/aytree_server.py`** — the working Python power layer shared by both: notes DB
+  (`GET`/`POST /api/notes`), git branch enumeration, `/api/tree` filesystem scan, safe
+  folder/branch mutation.
 - **`legacy/harvest/`** — Grok's original scrape of the intuitree source (working scratch).
 - **`docs/`** — the unified design corpus (architecture, catalog, harvest provenance, radial
   re-rooting, dyslexia encoding, GUI specs, swarm path tuner, renderer contract).

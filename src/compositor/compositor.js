@@ -1,3 +1,5 @@
+import { createFilterState } from './filters.js';
+
 /**
  * The layering mechanism: viewport rect, dpr clamp, per-pane view (camera is
  * compositor-owned, never a lens global), z-manifest {base, weave}, present(). Ported from
@@ -12,6 +14,7 @@ export class Compositor {
     this.view = { tx: 0, ty: 0, scale: 1 };
     this.baseLens = null;
     this.weaveOverlay = null; // z1, translucent, optional — docs/ARCHITECTURE.md §2.5
+    this.filterState = createFilterState(); // on-screen filter, shared across lenses
   }
 
   mount(baseLens) {
@@ -45,7 +48,11 @@ export class Compositor {
     const cx = clientX - rect.left;
     const cy = clientY - rect.top;
     const before = this.screenToWorld(cx, cy);
-    this.view.scale = Math.max(0.15, Math.min(42, this.view.scale * factor));
+    // World coords are normalized 0..1, so fitView sets scale ≈ min(canvas w,h) — hundreds
+    // to thousands of px. The zoom cap must sit well ABOVE screen dimensions, not ~1×; the
+    // old [0.15, 42] range (from the pixel-space harvested prototype) snapped every zoom to
+    // 42 on first use, collapsing the view and locking out zoom-in. See git blame.
+    this.view.scale = Math.max(1, Math.min(100000, this.view.scale * factor));
     const after = this.screenToWorld(cx, cy);
     this.view.tx += (after.wx - before.wx) * this.view.scale;
     this.view.ty += (after.wy - before.wy) * this.view.scale;
@@ -64,14 +71,15 @@ export class Compositor {
 
   hitTest(sx, sy) {
     if (!this.baseLens || !this.baseLens.hitTest) return null;
-    return this.baseLens.hitTest(sx, sy, this.view);
+    return this.baseLens.hitTest(sx, sy, this.view, this.filterState);
   }
 
   present() {
     const w = this.canvas.width / this.dpr;
     const h = this.canvas.height / this.dpr;
     this.ctx.clearRect(0, 0, w, h);
-    if (this.baseLens) this.baseLens.draw(this.ctx, { w, h, view: this.view });
-    if (this.weaveOverlay) this.weaveOverlay.draw(this.ctx, { w, h, view: this.view });
+    const ctxArgs = { w, h, view: this.view, filter: this.filterState };
+    if (this.baseLens) this.baseLens.draw(this.ctx, ctxArgs);
+    if (this.weaveOverlay) this.weaveOverlay.draw(this.ctx, ctxArgs);
   }
 }

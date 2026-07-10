@@ -8,6 +8,7 @@
 import { hashStr } from '../model/hash.js';
 import { catForExt, drawGlyph } from '../compositor/encode.js';
 import { hitTestNodes } from '../compositor/hit-targets.js';
+import { matchesFileNode } from '../compositor/filters.js';
 
 export class SpatialMapLens {
   constructor() {
@@ -15,7 +16,11 @@ export class SpatialMapLens {
   }
 
   setData(snapshot) {
-    this.nodes = (snapshot.files || []).map((f) => ({ ...f, cat: catForExt(f.ext) }));
+    const notes = snapshot.notes || {};
+    this.nodes = (snapshot.files || []).map((f) => {
+      const note = notes[f.path];
+      return { ...f, cat: catForExt(f.ext), note: note || null, hasNote: !!(note && (note.notes || note.status)) };
+    });
     this.layout();
   }
 
@@ -70,19 +75,21 @@ export class SpatialMapLens {
     view.ty = availH * 0.5 - cy * view.scale;
   }
 
-  draw(ctx, { view }) {
+  draw(ctx, { view, filter }) {
     for (const n of this.nodes) {
+      if (filter && !matchesFileNode(filter, n)) continue;
       const sx = n.wx * view.scale + view.tx;
       const sy = n.wy * view.scale + view.ty;
       const r = Math.max(2, n.wr * view.scale);
-      drawGlyph(ctx, sx, sy, r, n.cat);
+      drawGlyph(ctx, sx, sy, r, n.cat, { noted: n.hasNote });
     }
   }
 
-  hitTest(sx, sy, view) {
+  hitTest(sx, sy, view, filter) {
     const wx = (sx - view.tx) / view.scale;
     const wy = (sy - view.ty) / view.scale;
-    return hitTestNodes(this.nodes, wx, wy);
+    const pool = filter ? this.nodes.filter((n) => matchesFileNode(filter, n)) : this.nodes;
+    return hitTestNodes(pool, wx, wy);
   }
 
   resize() {}
