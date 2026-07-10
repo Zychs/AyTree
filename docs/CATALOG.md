@@ -32,7 +32,7 @@ The immersive/spatial + DAG + weave monolith. This is the primary harvest anchor
 | `worldToScreenGraph` / `g2s` | 627 | `src/lenses/dag-gitgraph.js` | port |
 | `hitGraph(sx,sy)` | 638 | `src/compositor/hit-targets.js` | derive |
 | `initGraphCanvas` / `toggleGraph` | 472/736 | `src/compositor/compositor.js` | derive — becomes z-manifest toggle |
-| `updateCurrentCommit(sha)` | 646 | `src/model/snapshot.js` | derive — `scrub_t` → nearest index (drop tree fetch) |
+| `updateCurrentCommit(sha)` | 646 | `src/model/snapshot.js` | **derived — done.** Landed as `nearestCommitIndexForT(snapshot, t)`; the tree fetch was dropped, not carried forward |
 | `stepCommit` / `replayHistory` | 672/679 | (shell / raf) | defer — scrub animation |
 | `simulateCommit()` | 695 | — | defer — demo mutation |
 | `resizeCanvas()` | 174 | `src/compositor/compositor.js` | derive — `dpr` clamp 1–2 |
