@@ -30,7 +30,7 @@ export function catForExt(ext) {
   return 'other';
 }
 
-export function drawGlyph(ctx, x, y, r, cat, { conflict = false, fill, stroke } = {}) {
+export function drawGlyph(ctx, x, y, r, cat, { conflict = false, noted = false, fill, stroke } = {}) {
   const shape = CAT_SHAPE[cat] || 'circle';
   ctx.beginPath();
   switch (shape) {
@@ -58,6 +58,15 @@ export function drawGlyph(ctx, x, y, r, cat, { conflict = false, fill, stroke } 
   if (conflict) {
     ctx.lineWidth = 3;
     ctx.strokeStyle = stroke || '#fff';
+    ctx.stroke();
+  }
+  // "has a note" channel: a quiet detached ring, not a color change — deliberately the only
+  // extra thing drawn (low perceptual cost: one signal, not a wall of badges).
+  if (noted) {
+    ctx.beginPath();
+    ctx.arc(x, y, r + 3, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(244,237,207,0.55)';
+    ctx.lineWidth = 1;
     ctx.stroke();
   }
 }

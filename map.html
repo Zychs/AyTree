@@ -1,0 +1,633 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AyTree — radial + directory map</title>
+  <style>
+    :root {
+      --bg: #0f0e0a;
+      --bg-soft: #17150d;
+      --text: #f4edcf;
+      --muted: #a99f78;
+      --accent: #c2a334;
+      --accent-strong: #e0be3e;
+      --line: rgba(224, 190, 62, 0.22);
+      --card: #17150d;
+      --dir-w: min(380px, 38vw);
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0; width: 100vw; height: 100vh; overflow: hidden;
+      background: var(--bg); color: var(--text);
+      font-family: system-ui, Inter, ui-sans-serif, sans-serif;
+      text-rendering: optimizeLegibility;
+      line-height: 1.45;
+    }
+
+    /* —— layout: radial (flex) | directory (fixed) —— */
+    #app {
+      display: grid;
+      grid-template-columns: 1fr var(--dir-w);
+      grid-template-rows: auto 1fr auto;
+      height: 100vh;
+      width: 100vw;
+    }
+    #topbar {
+      grid-column: 1 / -1;
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      padding: 10px 14px; border-bottom: 1px solid var(--line);
+      background: rgba(15, 14, 10, 0.92);
+    }
+    .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .brand h1 {
+      margin: 0; font-size: 1rem; font-weight: 700; color: var(--accent-strong);
+      letter-spacing: -0.02em;
+    }
+    .brand p { margin: 1px 0 0; font-size: 0.72rem; color: var(--muted); }
+    .controls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    button {
+      padding: 7px 12px; font-size: 0.8rem; background: var(--card);
+      color: var(--text); border: 1px solid var(--line); border-radius: 6px; cursor: pointer;
+    }
+    button:hover { border-color: var(--accent); }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+    button.active { border-color: var(--accent-strong); color: var(--accent-strong); }
+
+    #stage {
+      position: relative; min-width: 0; min-height: 0;
+      border-right: 1px solid var(--line);
+    }
+    #map {
+      display: block; width: 100%; height: 100%;
+      touch-action: none; background: var(--bg); cursor: grab;
+    }
+    #map:active { cursor: grabbing; }
+
+    #dir-pane {
+      display: flex; flex-direction: column; min-height: 0; min-width: 0;
+      background: var(--bg-soft);
+    }
+    #dir-head {
+      flex: none; padding: 10px 12px 8px; border-bottom: 1px solid var(--line);
+    }
+    #dir-head h2 {
+      margin: 0; font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase;
+      color: var(--muted); font-weight: 600;
+    }
+    #dir-head .hint { margin: 4px 0 0; font-size: 0.72rem; color: var(--muted); line-height: 1.4; }
+    #dir-host {
+      flex: 1; overflow: auto; padding: 6px 4px 12px;
+    }
+
+    #crumbs {
+      grid-column: 1 / -1;
+      display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
+      padding: 7px 14px; border-top: 1px solid var(--line);
+      font-size: 0.8rem; background: rgba(15, 14, 10, 0.92);
+    }
+    #crumbs .crumb { color: var(--accent-strong); cursor: pointer; background: none; border: none; padding: 2px 4px; font: inherit; }
+    #crumbs .crumb:hover { text-decoration: underline; }
+    #crumbs .sep { color: var(--muted); }
+    #crumbs .cur { color: var(--text); padding: 2px 4px; }
+    #status { margin-left: auto; font-size: 0.7rem; color: var(--muted); max-width: 45%; text-align: right; }
+
+    /* floating bits over canvas */
+    #legend {
+      position: absolute; bottom: 12px; left: 12px; max-width: 280px;
+      font-size: 0.72rem; line-height: 1.5; color: var(--muted);
+      background: rgba(15, 14, 10, 0.86); border: 1px solid var(--line);
+      border-radius: 8px; padding: 10px 12px; pointer-events: none;
+    }
+    #legend b { color: var(--text); font-weight: 600; }
+    #legend kbd {
+      background: var(--bg-soft); border: 1px solid var(--line); border-radius: 3px;
+      padding: 0 4px; font-family: monospace; font-size: 0.72rem; color: var(--text);
+    }
+    #zoombar {
+      position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
+      display: flex; align-items: center; gap: 6px;
+      background: rgba(15, 14, 10, 0.86); border: 1px solid var(--line);
+      border-radius: 8px; padding: 6px 8px;
+    }
+    #zoombar button { padding: 4px 11px; font-size: 1rem; line-height: 1; }
+    #zoombar #zoom-fit { font-size: 0.78rem; }
+    #zoom-readout {
+      min-width: 46px; text-align: center; font-size: 0.8rem;
+      font-variant-numeric: tabular-nums; color: var(--text);
+    }
+    #inspector {
+      position: absolute; top: 12px; right: 12px; width: 280px; display: none;
+      background: rgba(15, 14, 10, 0.92); border: 1px solid var(--line);
+      border-radius: 8px; padding: 12px;
+    }
+    #inspector.open { display: block; }
+    #inspector .name { font-weight: 700; font-size: 0.95rem; word-break: break-all; }
+    #inspector .path { font-family: monospace; font-size: 0.78rem; color: var(--muted); word-break: break-all; margin-top: 2px; }
+    #inspector .meta { font-size: 0.74rem; color: var(--muted); margin-top: 6px; }
+    #inspector .layer {
+      display: inline-block; margin-top: 6px; font-size: 0.68rem; padding: 2px 7px;
+      border: 1px solid var(--line); border-radius: 3px; color: var(--accent-strong);
+    }
+    #inspector .note {
+      font-size: 0.82rem; margin-top: 8px; padding: 8px; background: var(--bg-soft);
+      border-radius: 5px; border: 1px solid var(--line);
+    }
+    #inspector .close { margin-top: 10px; }
+
+    /* directory tree rows — generous hit targets (gui-hit-targets) */
+    .ay-dir-empty { padding: 16px; color: var(--muted); font-size: 0.85rem; }
+    .ay-dir-list { list-style: none; margin: 0; padding: 0; }
+    .ay-dir-row {
+      display: flex; align-items: center; gap: 4px;
+      min-height: 32px; padding: 2px 8px 2px 4px;
+      border-radius: 5px; cursor: default; outline: none;
+      font-size: 0.84rem; line-height: 1.35;
+    }
+    .ay-dir-row:hover { background: rgba(224, 190, 62, 0.08); }
+    .ay-dir-row:focus-visible { box-shadow: inset 0 0 0 1px var(--accent-strong); }
+    .ay-dir-row.is-selected { background: rgba(224, 190, 62, 0.16); }
+    .ay-dir-row.is-view-root { font-weight: 600; }
+    .ay-dir-pad { flex: none; }
+    .ay-dir-twist {
+      flex: none; width: 22px; height: 28px; padding: 0; border: none; background: transparent;
+      color: var(--muted); font-size: 0.7rem; cursor: pointer; border-radius: 4px;
+    }
+    .ay-dir-twist:hover:not(:disabled) { color: var(--text); background: rgba(224,190,62,0.1); }
+    .ay-dir-twist.is-leaf { opacity: 0.35; cursor: default; }
+    .ay-dir-glyph {
+      flex: none; width: 10px; height: 10px; margin: 0 4px;
+      background: var(--cat, var(--muted));
+    }
+    .ay-dir-glyph.shape-dir {
+      background: transparent; border: 1.5px solid var(--accent);
+      border-radius: 2px; width: 9px; height: 9px;
+    }
+    .ay-dir-glyph.shape-circle { border-radius: 50%; }
+    .ay-dir-glyph.shape-square { border-radius: 1px; }
+    .ay-dir-glyph.shape-triangle {
+      width: 0; height: 0; background: transparent;
+      border-left: 5px solid transparent; border-right: 5px solid transparent;
+      border-bottom: 9px solid var(--cat, var(--muted));
+    }
+    .ay-dir-glyph.shape-diamond {
+      transform: rotate(45deg); width: 8px; height: 8px; border-radius: 1px;
+    }
+    .ay-dir-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ay-dir-meta {
+      flex: none; font-size: 0.65rem; color: var(--muted); letter-spacing: 0.02em;
+      display: flex; align-items: center; gap: 4px; max-width: 72px;
+    }
+    .ay-dir-note { color: var(--accent-strong); font-size: 0.75rem; }
+    .ay-dir-reroot {
+      flex: none; width: 26px; height: 26px; padding: 0; font-size: 0.85rem;
+      border-radius: 4px; opacity: 0; color: var(--accent-strong);
+    }
+    .ay-dir-row:hover .ay-dir-reroot,
+    .ay-dir-row:focus-within .ay-dir-reroot,
+    .ay-dir-row.is-selected .ay-dir-reroot { opacity: 1; }
+
+    #arch-strip {
+      display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px;
+    }
+    #arch-strip span {
+      font-size: 0.62rem; padding: 2px 6px; border-radius: 3px;
+      border: 1px solid var(--line); color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <header id="topbar">
+      <div class="brand">
+        <svg width="26" height="26" viewBox="0 0 100 100" aria-hidden="true" style="flex-shrink:0;">
+          <g fill="none" stroke="var(--accent-strong)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 84 L50 26"/><path d="M78 84 L50 26"/>
+            <path d="M22 84 L15 93"/><path d="M22 84 L27 94"/><path d="M78 84 L85 93"/><path d="M78 84 L73 94"/>
+            <path d="M34 60 L66 60"/>
+          </g>
+          <circle cx="50" cy="60" r="5" fill="var(--accent-strong)"/>
+        </svg>
+        <div>
+          <h1>AyTree · map</h1>
+          <p>radial + directory — one RepoSnapshot, two projections</p>
+        </div>
+      </div>
+      <div class="controls">
+        <button id="btn-self" class="active" title="AyTree mapping itself (offline demo)">Self map</button>
+        <button id="btn-server" title="Load this repo via GET /api/tree (python-scan)">From server</button>
+        <button id="btn-open" title="Chromium File System Access API">Open local…</button>
+      </div>
+    </header>
+
+    <section id="stage" aria-label="radial onion lens">
+      <canvas id="map"></canvas>
+      <div id="legend">
+        <div><b>center</b> = current root · <b>rings</b> = depth outward</div>
+        <div><b>Click a directory</b> (canvas or list ⊙) to re-root · file → inspect</div>
+        <div style="margin-top:6px;">
+          drag pan · scroll zoom · <kbd>R</kbd> fit · <kbd>Backspace</kbd> up · <kbd>Esc</kbd> close
+        </div>
+      </div>
+      <div id="zoombar">
+        <button id="zoom-out" aria-label="zoom out">−</button>
+        <span id="zoom-readout">100%</span>
+        <button id="zoom-in" aria-label="zoom in">+</button>
+        <button id="zoom-fit">fit</button>
+      </div>
+      <aside id="inspector" aria-live="polite">
+        <div class="name" id="insp-name"></div>
+        <div class="path" id="insp-path"></div>
+        <div class="meta" id="insp-meta"></div>
+        <div class="layer" id="insp-layer" style="display:none;"></div>
+        <div class="note" id="insp-note" style="display:none;"></div>
+        <button class="close" id="insp-close">close</button>
+      </aside>
+    </section>
+
+    <aside id="dir-pane" aria-label="directory view">
+      <div id="dir-head">
+        <h2>Directory</h2>
+        <p class="hint">Same tree as the radial. Expand rows · ⊙ or double-click to re-root · arrows navigate.</p>
+        <div id="arch-strip" title="Architecture layers (docs/ARCHITECTURE.md)">
+          <span>model</span><span>ingest</span><span>compositor</span>
+          <span>lenses</span><span>server</span><span>docs</span><span>primary</span>
+        </div>
+      </div>
+      <div id="dir-host"></div>
+    </aside>
+
+    <nav id="crumbs" aria-label="current root">
+      <span class="cur">repo</span>
+      <span id="status">loading…</span>
+    </nav>
+  </div>
+
+  <script type="module">
+    import { Compositor } from './src/compositor/compositor.js';
+    import { RafScheduler } from './src/compositor/raf.js';
+    import { RadialOnionLens } from './src/lenses/radial-onion.js';
+    import { loadSnapshot } from './src/ingest/picker.js';
+    import { pickPythonScan } from './src/ingest/python-scan.js';
+    import { fetchNotes } from './src/ingest/notes-client.js';
+    import { DirectoryTree } from './src/ui/directory-tree.js';
+    import { layerForPath } from './src/model/tree.js';
+    import { makeSnapshot } from './src/model/snapshot.js';
+
+    // ---- Self-map: AyTree's real layout (offline, no server) ----
+    // Intermediate dirs + files; matches architecture sections so layer tags light up.
+    const SELF_PATHS = [
+      ['src', 1], ['src/model', 1], ['src/ingest', 1], ['src/compositor', 1],
+      ['src/lenses', 1], ['src/ui', 1],
+      ['docs', 1], ['docs/specs', 1], ['server', 1], ['legacy', 1], ['legacy/harvest', 1], ['assets', 1],
+      ['README.md', 0], ['shell.html', 0], ['radial-onion.html', 0], ['map.html', 0],
+      ['.gitignore', 0], ['.gitattributes', 0],
+      ['server/aytree_server.py', 0],
+      ['src/model/hash.js', 0], ['src/model/snapshot.js', 0], ['src/model/tree.js', 0],
+      ['src/ingest/local-git.js', 0], ['src/ingest/notes-client.js', 0],
+      ['src/ingest/picker.js', 0], ['src/ingest/python-scan.js', 0],
+      ['src/compositor/compositor.js', 0], ['src/compositor/encode.js', 0],
+      ['src/compositor/filters.js', 0], ['src/compositor/hit-targets.js', 0],
+      ['src/compositor/raf.js', 0], ['src/compositor/lens-registry.js', 0],
+      ['src/lenses/dag-gitgraph.js', 0], ['src/lenses/radial-onion.js', 0],
+      ['src/lenses/spatial-map.js', 0], ['src/lenses/weave.js', 0],
+      ['src/ui/directory-tree.js', 0],
+      ['docs/ARCHITECTURE.md', 0], ['docs/CATALOG.md', 0], ['docs/HARVEST.md', 0],
+      ['docs/dyslexia-encoding.md', 0], ['docs/renderer-contract.md', 0],
+      ['docs/swarm-path-tuner.md', 0], ['docs/BACKBONE-TODO.md', 0],
+      ['docs/dyslexistree-design-6c22687c.md', 0],
+      ['docs/specs/radial-rerooting-spec.md', 0], ['docs/specs/gui-spatial-map.md', 0],
+      ['docs/specs/gui-timeline-gitgraph.md', 0], ['docs/specs/gui-timeline-compound.md', 0],
+      ['docs/specs/dyslexiui-design.md', 0], ['docs/specs/gui-dyslexia-encode.md', 0],
+      ['docs/specs/gui-hit-targets.md', 0], ['docs/specs/gui-lod-controller.md', 0],
+      ['docs/specs/gui-raf-scheduler.md', 0], ['docs/specs/gui-render-compositor.md', 0],
+      ['docs/specs/gui-worker-indexer.md', 0],
+      ['legacy/index_tree.html', 0],
+      ['legacy/harvest/harvested_raw.js', 0],
+      ['legacy/harvest/extracted_key_funcs.txt', 0],
+    ];
+
+    function makeSelfMap() {
+      const files = SELF_PATHS.map(([path, isDir]) => {
+        const name = path.split('/').pop();
+        const ext = isDir ? '' : (name.includes('.') ? name.split('.').pop().toLowerCase() : '');
+        return { id: path, path, name, ext, isDir: !!isDir };
+      });
+      const notes = {
+        'src/lenses/radial-onion.js': { notes: 're-rootable starburst + onion rings', status: 'done' },
+        'src/model/tree.js': { notes: 'shared tree SSOT for radial + directory', status: 'done' },
+        'src/ui/directory-tree.js': { notes: 'directory panel (this pane)', status: 'done' },
+        'src/ingest/python-scan.js': { notes: '/api/tree → RepoSnapshot', status: 'done' },
+        'docs/ARCHITECTURE.md': { notes: 'platform shape: picker → SSOT → compositor → lenses', status: 'done' },
+        'legacy/index_tree.html': { notes: 'primary day-to-day tool (tree + notes)', status: 'done' },
+        'docs/BACKBONE-TODO.md': { notes: 'navigation + backbone plan', status: 'in-progress' },
+        'server/aytree_server.py': { notes: 'notes DB · tree scan · git branches', status: 'done' },
+      };
+      const snap = makeSnapshot({
+        repoPath: 'AyTree',
+        files,
+        commits: [],
+        generatedAt: new Date().toISOString(),
+      });
+      snap.notes = notes;
+      return snap;
+    }
+
+    // ---- shell wiring ----
+    const canvas = document.getElementById('map');
+    const statusEl = document.getElementById('status');
+    const crumbsEl = document.getElementById('crumbs');
+    const insp = document.getElementById('inspector');
+    const inspName = document.getElementById('insp-name');
+    const inspPath = document.getElementById('insp-path');
+    const inspMeta = document.getElementById('insp-meta');
+    const inspLayer = document.getElementById('insp-layer');
+    const inspNote = document.getElementById('insp-note');
+    const zoomReadout = document.getElementById('zoom-readout');
+    const btnSelf = document.getElementById('btn-self');
+    const btnServer = document.getElementById('btn-server');
+    const btnOpen = document.getElementById('btn-open');
+
+    const compositor = new Compositor(canvas);
+    const raf = new RafScheduler(() => compositor.present());
+    const lens = new RadialOnionLens();
+    compositor.mount(lens);
+
+    const dir = new DirectoryTree(document.getElementById('dir-host'), {
+      onSelect: (node) => {
+        if (!node) return;
+        lens.setSelected(node.path);
+        raf.schedule();
+        updateInspector(node);
+      },
+      onReRoot: (path) => reRoot(path),
+    });
+
+    let snapshot = null;
+    let fitScale = 1;
+    let sourceMode = 'self';
+
+    function setStatus(msg) {
+      // Keep crumbs first; status is the trailing flex child.
+      statusEl.textContent = msg;
+    }
+
+    function setActiveSource(mode) {
+      sourceMode = mode;
+      btnSelf.classList.toggle('active', mode === 'self');
+      btnServer.classList.toggle('active', mode === 'server');
+      btnOpen.classList.toggle('active', mode === 'local');
+    }
+
+    function updateZoom() {
+      const pct = Math.round((compositor.view.scale / (fitScale || 1)) * 100);
+      zoomReadout.textContent = pct + '%';
+    }
+
+    function zoomBy(factor) {
+      const r = canvas.getBoundingClientRect();
+      compositor.zoomAt(r.left + r.width / 2, r.top + r.height / 2, factor);
+      updateZoom();
+      raf.schedule();
+    }
+
+    function fitAll() {
+      compositor.fitView(lens.nodes);
+      fitScale = compositor.view.scale || 1;
+      updateZoom();
+      raf.schedule();
+    }
+
+    function load(snap) {
+      snapshot = snap;
+      lens.setData(snap);
+      dir.setTree(lens.tree, { notes: snap.notes || {}, rootPath: '', selectedPath: null });
+      compositor.resize();
+      compositor.fitView(lens.nodes);
+      fitScale = compositor.view.scale || 1;
+      updateZoom();
+      renderCrumbs();
+      raf.schedule();
+      const dirs = (snap.files || []).filter((f) => f.isDir).length;
+      const files = (snap.files || []).filter((f) => !f.isDir).length;
+      setStatus(`${snap.repoPath} · ${files} files · ${dirs} dirs`);
+      updateInspector(null);
+    }
+
+    function renderCrumbs() {
+      const root = lens.rootPath || '';
+      const parts = root ? root.split('/') : [];
+      const status = statusEl; // preserve & re-append
+      const statusText = status.textContent;
+      crumbsEl.innerHTML = '';
+
+      const mk = (label, path, isCur) => {
+        if (isCur) {
+          const el = document.createElement('span');
+          el.className = 'cur';
+          el.textContent = label;
+          return el;
+        }
+        const el = document.createElement('button');
+        el.type = 'button';
+        el.className = 'crumb';
+        el.textContent = label;
+        el.addEventListener('click', () => reRoot(path));
+        return el;
+      };
+
+      crumbsEl.appendChild(mk('repo', '', parts.length === 0));
+      let acc = '';
+      parts.forEach((p, i) => {
+        acc = acc ? acc + '/' + p : p;
+        const sep = document.createElement('span');
+        sep.className = 'sep';
+        sep.textContent = '›';
+        crumbsEl.appendChild(sep);
+        crumbsEl.appendChild(mk(p, acc, i === parts.length - 1));
+      });
+      status.id = 'status';
+      status.textContent = statusText;
+      crumbsEl.appendChild(status);
+    }
+
+    function reRoot(path) {
+      if (path == null) path = '';
+      lens.reRoot(path);
+      dir.setRoot(path);
+      compositor.fitView(lens.nodes);
+      fitScale = compositor.view.scale || 1;
+      updateZoom();
+      renderCrumbs();
+      raf.schedule();
+      updateInspector(null);
+    }
+
+    function selectNode(node) {
+      if (!node) {
+        lens.setSelected(null);
+        dir.setSelected(null);
+        raf.schedule();
+        updateInspector(null);
+        return;
+      }
+      lens.setSelected(node.path);
+      dir.setSelected(node.path);
+      raf.schedule();
+      updateInspector(node);
+    }
+
+    function updateInspector(node) {
+      if (!node) {
+        insp.classList.remove('open');
+        return;
+      }
+      inspName.textContent = node.name || '/';
+      inspPath.textContent = node.path || '(repo root)';
+      const kind = node.isDir ? 'directory' : 'file';
+      const depth = node.depth != null ? ` · depth ${node.depth}` : '';
+      const cat = node.cat ? ` · ${node.cat}` : '';
+      inspMeta.textContent = kind + depth + cat;
+
+      const layer = layerForPath(node.path || '');
+      if (layer && layer.id !== 'other' && layer.id !== 'root') {
+        inspLayer.style.display = 'inline-block';
+        inspLayer.textContent = `${layer.label} — ${layer.hint}`;
+      } else {
+        inspLayer.style.display = 'none';
+      }
+
+      const note = node.note || (snapshot && snapshot.notes && snapshot.notes[node.path]);
+      if (note && (note.notes || note.status)) {
+        inspNote.style.display = 'block';
+        inspNote.textContent = (note.status ? `[${note.status}] ` : '') + (note.notes || '');
+      } else {
+        inspNote.style.display = 'none';
+      }
+      insp.classList.add('open');
+    }
+
+    async function attachNotes(snap) {
+      try {
+        const raw = await fetchNotes();
+        const prefix = `${snap.repoPath}/`;
+        snap.notes = snap.notes || {};
+        for (const [k, v] of Object.entries(raw || {})) {
+          if (k.startsWith(prefix)) snap.notes[k.slice(prefix.length)] = v;
+          else if (!k.includes('::')) {
+            // already repo-relative or unmatched — keep if path exists
+            if ((snap.files || []).some((f) => f.path === k)) snap.notes[k] = v;
+          }
+        }
+      } catch (_) {
+        snap.notes = snap.notes || {};
+      }
+      return snap;
+    }
+
+    // ---- pan / zoom / click on canvas ----
+    let dragging = false, lastX = 0, lastY = 0, moved = 0;
+    canvas.addEventListener('pointerdown', (e) => {
+      canvas.setPointerCapture(e.pointerId);
+      dragging = true; lastX = e.clientX; lastY = e.clientY; moved = 0;
+    });
+    window.addEventListener('pointermove', (e) => {
+      if (!dragging) return;
+      const dx = e.clientX - lastX, dy = e.clientY - lastY;
+      moved += Math.abs(dx) + Math.abs(dy);
+      compositor.pan(dx, dy);
+      lastX = e.clientX; lastY = e.clientY;
+      updateZoom(); raf.schedule();
+    });
+    window.addEventListener('pointerup', () => { dragging = false; });
+
+    canvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      compositor.zoomAt(e.clientX, e.clientY, e.deltaY < 0 ? 1.18 : 1 / 1.18);
+      updateZoom(); raf.schedule();
+    }, { passive: false });
+
+    canvas.addEventListener('click', (e) => {
+      if (moved > 4) return;
+      const rect = canvas.getBoundingClientRect();
+      const hit = compositor.hitTest(e.clientX - rect.left, e.clientY - rect.top);
+      if (!hit) { selectNode(null); return; }
+      const result = lens.onClick(hit);
+      if (result === null) {
+        // re-rooted
+        dir.setRoot(lens.rootPath);
+        compositor.fitView(lens.nodes);
+        fitScale = compositor.view.scale || 1;
+        updateZoom(); renderCrumbs(); raf.schedule(); updateInspector(null);
+      } else {
+        selectNode(result);
+      }
+    });
+
+    window.addEventListener('keydown', (e) => {
+      // Don't steal keys when focus is in the directory tree (it has its own model).
+      if (e.target.closest && e.target.closest('#dir-host')) return;
+      if (e.key === 'Escape') { selectNode(null); return; }
+      if (e.key.toLowerCase() === 'r' || e.key === '0') { fitAll(); return; }
+      if (e.key === '+' || e.key === '=') { zoomBy(1.25); return; }
+      if (e.key === '-' || e.key === '_') { zoomBy(1 / 1.25); return; }
+      if (e.key === 'Backspace') {
+        e.preventDefault();
+        const root = lens.rootPath || '';
+        if (!root) return;
+        reRoot(root.includes('/') ? root.split('/').slice(0, -1).join('/') : '');
+      }
+    });
+
+    new ResizeObserver(() => {
+      compositor.resize();
+      raf.schedule();
+    }).observe(canvas);
+
+    document.getElementById('insp-close').addEventListener('click', () => selectNode(null));
+    document.getElementById('zoom-in').addEventListener('click', () => zoomBy(1.25));
+    document.getElementById('zoom-out').addEventListener('click', () => zoomBy(1 / 1.25));
+    document.getElementById('zoom-fit').addEventListener('click', fitAll);
+
+    btnSelf.addEventListener('click', () => {
+      setActiveSource('self');
+      load(makeSelfMap());
+    });
+
+    btnServer.addEventListener('click', async () => {
+      try {
+        setStatus('loading /api/tree…');
+        // Prefer focused AyTree child under SCAN_ROOT (parent of this repo).
+        let snap = await pickPythonScan({ focus: 'AyTree' });
+        if (!snap.files.length) snap = await pickPythonScan();
+        await attachNotes(snap);
+        setActiveSource('server');
+        load(snap);
+      } catch (err) {
+        setStatus('server unavailable — ' + (err.message || err) + ' · try Self map or start server/aytree_server.py');
+      }
+    });
+
+    if (!window.showDirectoryPicker) {
+      btnOpen.disabled = true;
+      btnOpen.title = 'Needs Chromium (File System Access API)';
+    }
+    btnOpen.addEventListener('click', async () => {
+      try {
+        setStatus('opening local repo…');
+        const snap = await loadSnapshot('local-git');
+        await attachNotes(snap);
+        setActiveSource('local');
+        load(snap);
+      } catch (err) {
+        setStatus('open cancelled or failed: ' + (err && err.message ? err.message : err));
+      }
+    });
+
+    window.__aytree = { compositor, lens, dir, raf, get snapshot() { return snapshot; } };
+
+    // Boot: self-map immediately (lay of the land with no dependencies).
+    load(makeSelfMap());
+  </script>
+</body>
+</html>

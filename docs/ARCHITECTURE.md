@@ -4,10 +4,10 @@
 angles as swappable **lenses** over one shared data/model layer — not any single
 prototype evolved forward.*
 
-Status: **Phase 1 in progress.** `src/model/`, `src/compositor/`, `src/ingest/local-git.js`,
-and the `spatial-map` lens are implemented and wired into `shell.html`. `dag-gitgraph.js`,
-`weave.js`, and `python-scan.js` are **STUB** (no real logic, throw on call).
-`radial-onion.js` is **DEAD** — 274 lines of real layout code that no shell imports — see §4.
+Status: **Phase 1 in progress.** `src/model/` (incl. shared `tree.js` + onion sort/spacing),
+`src/compositor/`, `src/ingest/{local-git,python-scan}.js`, base lenses including
+`radial-onion` (dark-matter layout + path re-root), and the dual **map** surface
+(`map.html`: radial + directory) are wired. See §4 for remaining gaps.
 
 ---
 
@@ -130,19 +130,17 @@ Owner spec: [specs/gui-dyslexia-encode.md](specs/gui-dyslexia-encode.md).
 ## 4. What's delivered vs. deferred
 
 **Delivered:** directory shape, 11 promoted specs, [CATALOG.md](CATALOG.md),
-[HARVEST.md](HARVEST.md); `src/model/{hash,snapshot}.js`; `src/compositor/{compositor,raf,
-hit-targets,encode}.js`; `src/ingest/{local-git,picker}.js` (real `.git/logs` reflog parse,
-not a stub); `src/lenses/spatial-map.js`; `shell.html` booting picker → ingest → snapshot →
-compositor → spatial-map end to end.
+[HARVEST.md](HARVEST.md); `src/model/{hash,snapshot,tree}.js`; `src/compositor/{compositor,raf,
+hit-targets,encode,filters,lens-registry}.js`; `src/ingest/{local-git,picker,python-scan,
+notes-client}.js`; base lenses `spatial-map` / `dag-gitgraph` / `radial-onion` + `weave`
+overlay; `src/ui/directory-tree.js`; `shell.html` (picker → snapshot → compositor → lenses);
+`map.html` dual radial + directory projection (shared re-root / selection); `radial-onion.html`
+standalone lens page.
 
-**Deferred — STUB (no real logic yet):** `dag-gitgraph.js`, the `weave.js` overlay,
-`python-scan.js`, the worker/off-thread indexer, LOD controller wiring, editing/virtual-node
-operations (`index_tree.html`).
+**Deferred — still open:** worker/off-thread indexer, LOD controller wiring, editing /
+virtual-node ops on the primary tree tool, Relate/Staged-Fork modes on radial (spec §10),
+draw-cull (#4) and phase-offset dashes (#3).
 
-**Deferred — DEAD (real logic, unreachable):** `radial-onion.js` — a complete 6-step layout
-pipeline (`RadialOnionLens`), never imported by `shell.html` or `index.html`. Wiring it in is
-a shell-side change, not a rewrite.
-
-**Deferred — doc-only (no code at all, not even a stub):** split-view sandboxing +
-commit/omit gating (see root `README.md`; tracked in `docs/VERSIONING.md` and
-`docs/ghm2-development-plan.md` Phase C).
+**Deferred — doc-only (no code at all):** split-view sandboxing + commit/omit gating
+(see root `README.md`; tracked in `docs/VERSIONING.md` and `docs/ghm2-development-plan.md`
+Phase C).
