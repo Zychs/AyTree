@@ -4,6 +4,6 @@
   "type": "module",
   "description": "The dyslexia-first repository map.",
   "scripts": {
-    "test": "node --test tests/"
+    "test": "node --test 'tests/**/*.test.mjs'"
   }
 }
