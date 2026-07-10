@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>AyTree — modular shell (spatial-map lens)</title>
+  <title>AyTree — modular shell</title>
   <style>
     :root {
       --bg: #0f0e0a;
@@ -27,15 +27,77 @@
     #picker-prompt { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(15,14,10,0.7); z-index: 30; font-size: 1rem; text-align: center; }
     button { pointer-events: auto; padding: 8px 14px; font-size: 0.9rem; background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 4px; cursor: pointer; }
     button:hover { border-color: var(--accent); }
+    #lens-legend {
+      position: absolute; top: 8px; left: 8px; z-index: 15; display: flex; gap: 6px;
+      background: rgba(15,14,10,0.85); border: 1px solid var(--line); border-radius: 5px; padding: 5px;
+    }
+    .lens-chip {
+      display: flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 4px;
+      border: 1px solid var(--line); font-size: 0.72rem; color: var(--muted);
+    }
+    .lens-chip .key {
+      display: inline-block; min-width: 1.1em; text-align: center; padding: 0 3px;
+      border: 1px solid var(--muted); border-radius: 3px; font-weight: 700; color: var(--text);
+    }
+    .lens-chip.active { border-color: var(--accent-strong); color: var(--text); }
+    .lens-chip.active .key { border-color: var(--accent-strong); background: var(--accent-strong); color: #0f0e0a; }
+    .lens-chip.stub { opacity: 0.55; font-style: italic; }
+    .lens-chip.overlay-on { border-color: var(--accent); color: var(--accent-strong); }
+    #filter-panel {
+      position: absolute; top: 8px; right: 8px; z-index: 15; width: 168px;
+      background: rgba(15,14,10,0.9); border: 1px solid var(--line); border-radius: 5px;
+      padding: 8px; font-size: 0.72rem; color: var(--muted);
+    }
+    #filter-panel h3 {
+      margin: 0 0 5px; font-size: 0.68rem; letter-spacing: 0.04em; text-transform: uppercase;
+      color: var(--text); opacity: 0.75;
+    }
+    #filter-panel .group { margin-bottom: 8px; }
+    #filter-panel label {
+      display: flex; align-items: center; gap: 6px; padding: 2px 0; cursor: pointer;
+      user-select: none;
+    }
+    #filter-panel input[type="checkbox"] { accent-color: var(--accent-strong); cursor: pointer; }
+    #filter-panel .swatch {
+      display: inline-block; width: 8px; height: 8px; border-radius: 2px; flex: none;
+    }
+    #insp-status-row { display: flex; }
+    .status-chip {
+      font-size: 0.68rem; padding: 2px 7px; border-radius: 3px; border: 1px solid var(--line);
+      color: var(--muted); background: transparent; cursor: pointer;
+    }
+    .status-chip.active { border-color: var(--accent-strong); color: var(--text); font-weight: 700; }
   </style>
 </head>
 <body>
   <canvas id="map"></canvas>
 
+  <div id="lens-legend"></div>
+
+  <div id="filter-panel">
+    <div class="group">
+      <h3>categories</h3>
+      <div id="filter-categories"></div>
+    </div>
+    <div class="group">
+      <h3>kind</h3>
+      <label><input type="checkbox" id="filter-files" checked> files</label>
+      <label><input type="checkbox" id="filter-dirs" checked> directories</label>
+    </div>
+    <div class="group">
+      <h3>commits</h3>
+      <label><input type="checkbox" id="filter-regular" checked> regular</label>
+      <label><input type="checkbox" id="filter-merge" checked> merge</label>
+    </div>
+  </div>
+
   <div id="inspector" class="inspector">
     <div id="insp-name" style="font-weight:700; font-size:0.95rem;"></div>
     <div id="insp-path" style="font-family:monospace; font-size:0.82rem; word-break:break-all;"></div>
     <div id="insp-meta" style="color:var(--muted); font-size:0.75rem;"></div>
+    <div id="insp-status-row" style="display:none; margin-top:6px; gap:4px;"></div>
+    <textarea id="insp-note" style="display:none; width:100%; margin-top:6px; min-height:44px; resize:vertical; background:rgba(0,0,0,0.25); color:var(--text); border:1px solid var(--line); border-radius:4px; padding:4px 6px; font:inherit; font-size:0.8rem;" placeholder="add a note…"></textarea>
+    <div id="insp-note-saved" style="display:none; font-size:0.62rem; opacity:0.6; margin-top:2px;">saved</div>
     <div style="margin-top:6px;"><button id="close-insp">close</button></div>
   </div>
 
@@ -44,7 +106,7 @@
   <div id="picker-prompt">
     <div style="max-width:520px;">
       <div style="font-size:1.15rem; margin-bottom:8px;">AyTree — modular shell</div>
-      <div style="margin-bottom:12px;">Select a local git repo dir. Spatial-map lens only in this build — see docs/ARCHITECTURE.md §4 for deferred lenses.</div>
+      <div style="margin-bottom:12px;">Select a local git repo dir. Keys 1/2/3 switch lenses, w toggles the weave overlay.</div>
       <button id="pick-btn">Select local repo dir</button>
     </div>
   </div>
@@ -52,31 +114,176 @@
   <script type="module">
     import { Compositor } from './src/compositor/compositor.js';
     import { RafScheduler } from './src/compositor/raf.js';
-    import { SpatialMapLens } from './src/lenses/spatial-map.js';
+    import { BASE_LENSES, WEAVE_OVERLAY } from './src/compositor/lens-registry.js';
     import { loadSnapshot } from './src/ingest/picker.js';
+    import { CAT_COLOR } from './src/compositor/encode.js';
+    import { fetchNotes, saveNote } from './src/ingest/notes-client.js';
+
+    const STATUSES = ['todo', 'in-progress', 'blocked', 'done'];
 
     const canvas = document.getElementById('map');
     const statusEl = document.getElementById('status');
+    const legendEl = document.getElementById('lens-legend');
     const insp = document.getElementById('inspector');
     const inspName = document.getElementById('insp-name');
     const inspPath = document.getElementById('insp-path');
     const inspMeta = document.getElementById('insp-meta');
+    const inspStatusRow = document.getElementById('insp-status-row');
+    const inspNote = document.getElementById('insp-note');
+    const inspNoteSaved = document.getElementById('insp-note-saved');
     const pickerPrompt = document.getElementById('picker-prompt');
 
     const compositor = new Compositor(canvas);
-    const spatialMap = new SpatialMapLens();
-    compositor.mount(spatialMap);
-
     const raf = new RafScheduler(() => compositor.present());
 
+    let currentSnapshot = null;
+    let currentLensId = BASE_LENSES[0].id;
+    let weaveOn = false;
+
     function setStatus(msg) { statusEl.textContent = msg; }
+
+    function currentLens() {
+      return compositor.baseLens;
+    }
+
+    function renderLegend() {
+      legendEl.innerHTML = '';
+      for (const l of BASE_LENSES) {
+        const chip = document.createElement('span');
+        chip.className = 'lens-chip' + (l.id === currentLensId ? ' active' : '') + (l.ready ? '' : ' stub');
+        chip.innerHTML = `<span class="key">${l.key}</span>${l.label}${l.ready ? '' : ' (soon)'}`;
+        legendEl.appendChild(chip);
+      }
+      const wChip = document.createElement('span');
+      wChip.className = 'lens-chip' + (weaveOn ? ' overlay-on' : '') + (WEAVE_OVERLAY.ready ? '' : ' stub');
+      wChip.innerHTML = `<span class="key">${WEAVE_OVERLAY.key}</span>${WEAVE_OVERLAY.label}${WEAVE_OVERLAY.ready ? '' : ' (soon)'}`;
+      legendEl.appendChild(wChip);
+    }
+
+    function switchLens(entry) {
+      if (entry.id === currentLensId && compositor.baseLens) return;
+      const lens = new entry.ctor();
+      try {
+        if (currentSnapshot) lens.setData(currentSnapshot);
+        compositor.mount(lens);
+        currentLensId = entry.id;
+        renderLegend();
+        if (currentSnapshot) {
+          compositor.fitView(lens.nodes);
+          setStatus(`lens: ${entry.label} • ${currentSnapshot.repoPath}`);
+        } else {
+          setStatus(`lens: ${entry.label} selected • pick a repo to load data`);
+        }
+        raf.schedule();
+      } catch (e) {
+        setStatus(`${entry.label}: ${e.message}`);
+      }
+    }
+
+    function toggleWeave() {
+      if (!WEAVE_OVERLAY.ready) {
+        setStatus(`${WEAVE_OVERLAY.label}: not implemented yet — see docs/ARCHITECTURE.md §4`);
+        return;
+      }
+      weaveOn = !weaveOn;
+      if (weaveOn) {
+        const overlay = new WEAVE_OVERLAY.ctor();
+        if (currentSnapshot) overlay.setData(currentSnapshot);
+        compositor.setWeaveOverlay(overlay);
+      } else {
+        compositor.setWeaveOverlay(null);
+      }
+      renderLegend();
+      raf.schedule();
+    }
+
+    // === On-screen filter panel (docs/ARCHITECTURE.md's filter state lives on the
+    // compositor so it's shared across lenses; this just renders + edits it) ===
+    const catsEl = document.getElementById('filter-categories');
+    for (const cat of Object.keys(CAT_COLOR)) {
+      const label = document.createElement('label');
+      label.innerHTML = `<input type="checkbox" checked data-cat="${cat}"><span class="swatch" style="background:${CAT_COLOR[cat]}"></span>${cat}`;
+      catsEl.appendChild(label);
+    }
+    catsEl.addEventListener('change', (e) => {
+      const cat = e.target.dataset.cat;
+      if (!cat) return;
+      if (e.target.checked) compositor.filterState.categories.add(cat);
+      else compositor.filterState.categories.delete(cat);
+      raf.schedule();
+    });
+    document.getElementById('filter-files').addEventListener('change', (e) => {
+      compositor.filterState.showFiles = e.target.checked;
+      raf.schedule();
+    });
+    document.getElementById('filter-dirs').addEventListener('change', (e) => {
+      compositor.filterState.showDirs = e.target.checked;
+      raf.schedule();
+    });
+    document.getElementById('filter-regular').addEventListener('change', (e) => {
+      compositor.filterState.showRegularCommits = e.target.checked;
+      raf.schedule();
+    });
+    document.getElementById('filter-merge').addEventListener('change', (e) => {
+      compositor.filterState.showMergeCommits = e.target.checked;
+      raf.schedule();
+    });
+
+    // Default lens on boot
+    switchLens(BASE_LENSES[0]);
 
     function resizeAndDraw() {
       compositor.resize();
       raf.schedule();
     }
 
+    let noteSaveTimer = null;
+    let inspectedNode = null;
+
+    function renderStatusChips(node) {
+      inspStatusRow.innerHTML = '';
+      const current = node.note && node.note.status;
+      for (const s of STATUSES) {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'status-chip' + (s === current ? ' active' : '');
+        chip.textContent = s;
+        chip.addEventListener('click', () => {
+          node.note = node.note || {};
+          node.note.status = s === current ? '' : s; // click again to clear
+          node.hasNote = !!(node.note.notes || node.note.status);
+          renderStatusChips(node);
+          persistNote(node);
+          raf.schedule();
+        });
+        inspStatusRow.appendChild(chip);
+      }
+    }
+
+    // Server keys notes relative to SCAN_ROOT (the picked repo's parent dir), e.g.
+    // "AyTree/src/foo.js" — not "src/foo.js" like snapshot.files[].path (repo-relative).
+    function workspaceKey(path) {
+      return currentSnapshot ? `${currentSnapshot.repoPath}/${path}` : path;
+    }
+
+    function persistNote(node) {
+      clearTimeout(noteSaveTimer);
+      inspNoteSaved.style.display = 'none';
+      noteSaveTimer = setTimeout(async () => {
+        try {
+          await saveNote(workspaceKey(node.path), node.note || {});
+          if (inspectedNode === node) {
+            inspNoteSaved.style.display = 'block';
+            setTimeout(() => { inspNoteSaved.style.display = 'none'; }, 1200);
+          }
+        } catch {
+          setStatus('note not saved — is the server running? (server/aytree_server.py)');
+        }
+      }, 500); // debounce: autosave, no explicit save action to click
+    }
+
     function updateInspector(n) {
+      inspectedNode = n;
       if (!n) {
         insp.classList.remove('open');
         return;
@@ -84,8 +291,26 @@
       inspName.textContent = n.name + (n.isDir ? ' /' : '');
       inspPath.textContent = n.path;
       inspMeta.textContent = `${n.cat} • ${n.isDir ? 'directory' : 'file'} • click map or press Esc to close`;
+
+      // notes only make sense for file-tree nodes (spatial-map / radial-onion), not commits
+      const notable = typeof n.hasNote !== 'undefined';
+      inspStatusRow.style.display = notable ? 'flex' : 'none';
+      inspNote.style.display = notable ? 'block' : 'none';
+      if (notable) {
+        renderStatusChips(n);
+        inspNote.value = (n.note && n.note.notes) || '';
+      }
       insp.classList.add('open');
     }
+
+    inspNote.addEventListener('input', () => {
+      if (!inspectedNode) return;
+      inspectedNode.note = inspectedNode.note || {};
+      inspectedNode.note.notes = inspNote.value;
+      inspectedNode.hasNote = !!(inspectedNode.note.notes || inspectedNode.note.status);
+      persistNote(inspectedNode);
+      raf.schedule();
+    });
 
     canvas.addEventListener('pointerdown', (e) => {
       canvas.setPointerCapture(e.pointerId);
@@ -113,13 +338,26 @@
 
     canvas.addEventListener('click', (e) => {
       const rect = canvas.getBoundingClientRect();
-      const hit = compositor.hitTest(e.clientX - rect.left, e.clientY - rect.top);
+      let hit = compositor.hitTest(e.clientX - rect.left, e.clientY - rect.top);
+      // lens-specific click hook (e.g. radial-onion re-roots on directory click)
+      const lens = currentLens();
+      if (hit && lens && typeof lens.onClick === 'function') {
+        hit = lens.onClick(hit);
+        raf.schedule();
+      }
       updateInspector(hit);
     });
 
     window.addEventListener('keydown', (e) => {
-      if (e.key.toLowerCase() === 'r') { compositor.fitView(spatialMap.nodes); raf.schedule(); }
-      if (e.key === 'Escape') updateInspector(null);
+      if (e.key === 'Escape') { updateInspector(null); return; }
+      if (e.key.toLowerCase() === 'r') {
+        compositor.fitView(currentLens() ? currentLens().nodes : []);
+        raf.schedule();
+        return;
+      }
+      if (e.key.toLowerCase() === WEAVE_OVERLAY.key) { toggleWeave(); return; }
+      const entry = BASE_LENSES.find((l) => l.key === e.key);
+      if (entry) switchLens(entry);
     });
 
     new ResizeObserver(resizeAndDraw).observe(canvas);
@@ -130,12 +368,22 @@
       try {
         setStatus('loading local repo…');
         const snapshot = await loadSnapshot('local-git');
-        spatialMap.setData(snapshot);
+        // re-key the workspace-relative notes DB to this repo's own relative paths
+        const rawNotes = await fetchNotes();
+        const prefix = `${snapshot.repoPath}/`;
+        snapshot.notes = {};
+        for (const [k, v] of Object.entries(rawNotes)) {
+          if (k.startsWith(prefix)) snapshot.notes[k.slice(prefix.length)] = v;
+        }
+        currentSnapshot = snapshot;
+        const lens = currentLens();
+        lens.setData(snapshot);
+        if (compositor.weaveOverlay) compositor.weaveOverlay.setData(snapshot);
         pickerPrompt.style.display = 'none';
         compositor.resize();
-        compositor.fitView(spatialMap.nodes);
+        compositor.fitView(lens.nodes);
         raf.schedule();
-        setStatus(`${spatialMap.nodes.length} items • ${snapshot.commits.length} commits • ${snapshot.repoPath}`);
+        setStatus(`${lens.nodes.length} items • ${snapshot.commits.length} commits • ${snapshot.repoPath}`);
       } catch (e) {
         setStatus('picker cancelled or failed: ' + (e && e.message ? e.message : e));
       }

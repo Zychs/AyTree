@@ -1,0 +1,9 @@
+{
+  "name": "aytree",
+  "private": true,
+  "type": "module",
+  "description": "The dyslexia-first repository map.",
+  "scripts": {
+    "test": "node --test 'tests/**/*.test.mjs'"
+  }
+}
