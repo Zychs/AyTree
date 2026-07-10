@@ -69,6 +69,8 @@ export class RadialOnionLens {
     this.nodes = [];
     /** @type {string|null} */
     this.rootId = null;
+    /** Optional per-instance spacing overrides (tests / tuning). */
+    this.spacingOverrides = spacingOverrides;
     /** Repo-relative path of the current root ('' = full repo). Used by map.html. */
     this.rootPath = '';
     /** @type {string|null} */
@@ -81,6 +83,7 @@ export class RadialOnionLens {
 
   /**
    * Accept a tree-shaped root (`{ children }`) or RepoSnapshot-like `{ files[] }`.
+   * @param {OnionNode|{files?: object[], repoPath?: string}|null} snapshotOrTree
    * @param {OnionNode|{files?: object[], repoPath?: string, notes?: object}|null} snapshotOrTree
    */
   setData(snapshotOrTree) {
@@ -94,6 +97,8 @@ export class RadialOnionLens {
     this.layout();
   }
 
+  /** Click-to-re-root: recompute onion from the chosen node. */
+  reRoot(node) {
   /**
    * Click-to-re-root: recompute onion from the chosen node or repo-relative path.
    * @param {OnionNode|string|null} nodeOrPath
