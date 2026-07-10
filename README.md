@@ -36,6 +36,20 @@ visualizations are optional experiments. Both are real, but only one is a *tool*
 - **`legacy/harvest/`** — Grok's original scrape of the intuitree source (working scratch).
 - **`docs/`** — the unified design corpus (architecture, catalog, harvest provenance, radial
   re-rooting, dyslexia encoding, GUI specs, swarm path tuner, renderer contract).
+  One-click path: **`docs/ONE-CLICK-LAUNCH.md`** (bat → PWA → pywebview → `AyTree.exe`).
+
+---
+
+## Run (today)
+
+```bash
+# from repo root (checkout authority: ~/aytree on WSL)
+python server/aytree_server.py
+# open http://localhost:8000/  (or /legacy)
+npm test   # 27 assertions, node --test
+```
+
+Double-click / native window packaging is planned in `docs/ONE-CLICK-LAUNCH.md`; backbone + nav work in `docs/BACKBONE-TODO.md`.
 
 ---
 
