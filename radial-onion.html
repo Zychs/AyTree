@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AyTree — radial-onion lens</title>
+  <style>
+    :root {
+      --bg: #0f0e0a;
+      --bg-soft: #17150d;
+      --text: #f4edcf;
+      --muted: #a99f78;
+      --accent: #c2a334;
+      --accent-strong: #e0be3e;
+      --line: rgba(224, 190, 62, 0.22);
+      --card: #17150d;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0; width: 100vw; height: 100vh; overflow: hidden;
+      background: var(--bg); color: var(--text);
+      font-family: system-ui, Inter, ui-sans-serif, sans-serif; text-rendering: optimizeLegibility;
+    }
+    canvas { display: block; width: 100%; height: 100%; touch-action: none; background: var(--bg); cursor: grab; }
+    canvas:active { cursor: grabbing; }
+
+    .panel {
+      position: absolute; z-index: 10; background: rgba(15, 14, 10, 0.86);
+      border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px;
+      backdrop-filter: blur(2px);
+    }
+    #topbar {
+      top: 12px; left: 12px; right: 12px; display: flex; align-items: center; gap: 12px;
+      justify-content: space-between; pointer-events: none;
+    }
+    #topbar > * { pointer-events: auto; }
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .brand h1 { margin: 0; font-size: 1rem; font-weight: 700; color: var(--accent-strong); letter-spacing: -0.02em; }
+    .brand p { margin: 1px 0 0; font-size: 0.72rem; color: var(--muted); }
+    .controls { display: flex; gap: 8px; }
+    button {
+      pointer-events: auto; padding: 7px 12px; font-size: 0.8rem; background: var(--card);
+      color: var(--text); border: 1px solid var(--line); border-radius: 6px; cursor: pointer;
+    }
+    button:hover { border-color: var(--accent); }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    #crumbs {
+      top: 66px; left: 12px; display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
+      max-width: 60vw; font-size: 0.8rem;
+    }
+    #crumbs .crumb { color: var(--accent-strong); cursor: pointer; text-decoration: none; }
+    #crumbs .crumb:hover { text-decoration: underline; }
+    #crumbs .sep { color: var(--muted); }
+    #crumbs .cur { color: var(--text); }
+
+    #legend { bottom: 12px; left: 12px; max-width: 260px; font-size: 0.72rem; line-height: 1.5; color: var(--muted); }
+    #legend b { color: var(--text); font-weight: 600; }
+    #legend kbd {
+      background: var(--bg-soft); border: 1px solid var(--line); border-radius: 3px;
+      padding: 0 4px; font-family: monospace; font-size: 0.72rem; color: var(--text);
+    }
+
+    #status { bottom: 12px; right: 12px; font-size: 0.7rem; color: var(--muted); max-width: 40vw; }
+
+    #zoombar { bottom: 12px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 6px; }
+    #zoombar button { padding: 4px 11px; font-size: 1rem; line-height: 1; }
+    #zoombar #zoom-fit { font-size: 0.78rem; }
+    #zoombar #zoom-readout { min-width: 46px; text-align: center; font-size: 0.8rem; font-variant-numeric: tabular-nums; color: var(--text); }
+
+    #hud { top: 12px; left: 50%; transform: translateX(-50%); font-family: monospace; font-size: 0.72rem; line-height: 1.5; color: var(--muted); text-align: center; }
+    #hud b { color: var(--accent-strong); font-weight: 700; }
+
+    #inspector { top: 66px; right: 12px; width: 300px; display: none; }
+    #inspector.open { display: block; }
+    #inspector .name { font-weight: 700; font-size: 0.95rem; word-break: break-all; }
+    #inspector .path { font-family: monospace; font-size: 0.78rem; color: var(--muted); word-break: break-all; margin-top: 2px; }
+    #inspector .meta { font-size: 0.74rem; color: var(--muted); margin-top: 6px; }
+    #inspector .note { font-size: 0.82rem; margin-top: 8px; padding: 8px; background: var(--bg-soft); border-radius: 5px; border: 1px solid var(--line); }
+    #inspector .close { margin-top: 10px; }
+  </style>
+</head>
+<body>
+
+  <canvas id="map"></canvas>
+
+  <div id="topbar" class="panel" style="background: transparent; border: none; padding: 0;">
+    <div class="brand panel">
+      <svg width="26" height="26" viewBox="0 0 100 100" aria-hidden="true" style="flex-shrink:0;">
+        <g fill="none" stroke="var(--accent-strong)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M22 84 L50 26"/><path d="M78 84 L50 26"/>
+          <path d="M22 84 L15 93"/><path d="M22 84 L27 94"/><path d="M78 84 L85 93"/><path d="M78 84 L73 94"/>
+          <path d="M34 60 L66 60"/>
+        </g>
+        <circle cx="50" cy="60" r="5" fill="var(--accent-strong)"/>
+      </svg>
+      <div>
+        <h1>AyTree · radial-onion</h1>
+        <p>re-rootable radial starburst — one lens, loaded standalone</p>
+      </div>
+    </div>
+    <div class="controls panel" style="padding: 6px;">
+      <button id="btn-demo">Demo repo</button>
+      <button id="btn-open">Open local repo…</button>
+    </div>
+  </div>
+
+  <nav id="crumbs" class="panel" aria-label="current root"></nav>
+
+  <div id="legend" class="panel">
+    <div><b>center</b> = current root · <b>rings</b> = depth outward</div>
+    <div><b>Click a directory</b> to re-root into it · click a file to inspect</div>
+    <div style="margin-top:6px;">
+      drag <b>pan</b> · scroll or <kbd>+</kbd>/<kbd>−</kbd> <b>zoom</b> · <kbd>R</kbd> fit · <kbd>Backspace</kbd> up · <kbd>Esc</kbd> close
+    </div>
+  </div>
+
+  <div id="zoombar" class="panel">
+    <button id="zoom-out" aria-label="zoom out" title="zoom out (−)">−</button>
+    <span id="zoom-readout" title="zoom relative to fit">100%</span>
+    <button id="zoom-in" aria-label="zoom in" title="zoom in (+)">+</button>
+    <button id="zoom-fit" title="fit to view (R)">fit</button>
+  </div>
+
+  <aside id="inspector" class="panel" aria-live="polite">
+    <div class="name" id="insp-name"></div>
+    <div class="path" id="insp-path"></div>
+    <div class="meta" id="insp-meta"></div>
+    <div class="note" id="insp-note" style="display:none;"></div>
+    <button class="close" id="insp-close">close</button>
+  </aside>
+
+  <div id="status" class="panel"></div>
+
+  <div id="hud" class="panel">debug</div>
+
+  <script type="module">
+    import { Compositor } from './src/compositor/compositor.js?v=2';
+    import { RafScheduler } from './src/compositor/raf.js';
+    import { RadialOnionLens } from './src/lenses/radial-onion.js';
+    import { loadSnapshot } from './src/ingest/picker.js';
+    import { fetchNotes } from './src/ingest/notes-client.js';
+
+    // ---- Demo data: AyTree mapping its own repo (so the lens has real depth to explore) ----
+    // Each intermediate directory must be its own isDir:true entry (buildTree derives the
+    // tree by splitting '/'-paths). Only files[] and notes matter to radial-onion.
+    const PATHS = [
+      ['src', 1], ['docs', 1], ['docs/specs', 1], ['server', 1], ['legacy', 1], ['legacy/harvest', 1],
+      ['src/compositor', 1], ['src/lenses', 1], ['src/model', 1], ['src/ingest', 1],
+      ['README.md', 0], ['shell.html', 0], ['radial-onion.html', 0], ['.gitignore', 0], ['.gitattributes', 0],
+      ['server/aytree_server.py', 0],
+      ['src/compositor/compositor.js', 0], ['src/compositor/encode.js', 0], ['src/compositor/filters.js', 0],
+      ['src/compositor/hit-targets.js', 0], ['src/compositor/raf.js', 0], ['src/compositor/lens-registry.js', 0],
+      ['src/ingest/local-git.js', 0], ['src/ingest/notes-client.js', 0], ['src/ingest/picker.js', 0], ['src/ingest/python-scan.js', 0],
+      ['src/lenses/dag-gitgraph.js', 0], ['src/lenses/radial-onion.js', 0], ['src/lenses/spatial-map.js', 0], ['src/lenses/weave.js', 0],
+      ['src/model/hash.js', 0], ['src/model/snapshot.js', 0],
+      ['docs/ARCHITECTURE.md', 0], ['docs/CATALOG.md', 0], ['docs/HARVEST.md', 0], ['docs/dyslexia-encoding.md', 0],
+      ['docs/renderer-contract.md', 0], ['docs/swarm-path-tuner.md', 0], ['docs/BACKBONE-TODO.md', 0],
+      ['docs/specs/radial-rerooting-spec.md', 0], ['docs/specs/gui-spatial-map.md', 0], ['docs/specs/gui-timeline-gitgraph.md', 0],
+      ['docs/specs/dyslexiui-design.md', 0], ['docs/specs/gui-hit-targets.md', 0], ['docs/specs/gui-lod-controller.md', 0],
+      ['legacy/index_tree.html', 0], ['legacy/harvest/harvested_raw.js', 0], ['legacy/harvest/extracted_key_funcs.txt', 0],
+    ];
+    function makeDemo() {
+      const files = PATHS.map(([path, isDir]) => {
+        const name = path.split('/').pop();
+        const ext = isDir ? '' : (name.includes('.') ? name.split('.').pop() : '');
+        return { id: path, path, name, ext, isDir: !!isDir };
+      });
+      const notes = {
+        'src/lenses/radial-onion.js': { notes: 'you are looking at this lens right now', status: 'done' },
+        'docs/BACKBONE-TODO.md': { notes: 'backbone + navigation plan', status: 'in-progress' },
+        'server/aytree_server.py': { notes: 'ported working server', status: 'done' },
+      };
+      return { repoPath: 'AyTree (demo)', files, notes, commits: [], generatedAt: new Date().toISOString() };
+    }
+
+    const canvas = document.getElementById('map');
+    const statusEl = document.getElementById('status');
+    const crumbsEl = document.getElementById('crumbs');
+    const insp = document.getElementById('inspector');
+    const inspName = document.getElementById('insp-name');
+    const inspPath = document.getElementById('insp-path');
+    const inspMeta = document.getElementById('insp-meta');
+    const inspNote = document.getElementById('insp-note');
+
+    const compositor = new Compositor(canvas);
+    const raf = new RafScheduler(() => compositor.present());
+    const lens = new RadialOnionLens();
+    compositor.mount(lens);
+
+    let snapshot = null;
+    let fitScale = 1; // compositor.view.scale right after fitView — the "100%" reference
+
+    function setStatus(msg) { statusEl.textContent = msg; }
+
+    const zoomReadout = document.getElementById('zoom-readout');
+    const hud = document.getElementById('hud');
+    let wheelCount = 0, lastDelta = 0;
+    function updateZoom() {
+      const v = compositor.view;
+      const pct = Math.round((v.scale / (fitScale || 1)) * 100);
+      zoomReadout.textContent = pct + '%';
+      hud.innerHTML =
+        `scale <b>${v.scale.toFixed(1)}</b> · fit ${fitScale.toFixed(1)} · <b>${pct}%</b> · dpr ${compositor.dpr}<br>` +
+        `tx ${v.tx.toFixed(0)} · ty ${v.ty.toFixed(0)} · nodes ${lens.nodes.length}<br>` +
+        `wheel events <b>${wheelCount}</b> · last Δ ${lastDelta}`;
+    }
+    // Zoom about the viewport center (used by buttons + keyboard, independent of the wheel).
+    function zoomBy(factor) {
+      const r = canvas.getBoundingClientRect();
+      compositor.zoomAt(r.left + r.width / 2, r.top + r.height / 2, factor);
+      updateZoom();
+      raf.schedule();
+    }
+    function fitAll() {
+      compositor.fitView(lens.nodes);
+      fitScale = compositor.view.scale || 1;
+      updateZoom();
+      raf.schedule();
+    }
+
+    function load(snap) {
+      snapshot = snap;
+      lens.setData(snap);              // builds tree + layout at root ''
+      compositor.resize();
+      compositor.fitView(lens.nodes);  // center the unit square
+      fitScale = compositor.view.scale || 1;
+      updateZoom();
+      renderCrumbs();
+      raf.schedule();
+      const dirs = snap.files.filter(f => f.isDir).length;
+      setStatus(`${snap.files.length} entries (${dirs} dirs) • ${snap.repoPath}`);
+      updateInspector(null);
+    }
+
+    function renderCrumbs() {
+      const root = lens.rootPath || '';
+      const parts = root ? root.split('/') : [];
+      const frag = [];
+      const mk = (label, path, isCur) => {
+        const el = document.createElement(isCur ? 'span' : 'a');
+        el.className = isCur ? 'cur' : 'crumb';
+        el.textContent = label;
+        if (!isCur) { el.href = '#'; el.addEventListener('click', (e) => { e.preventDefault(); reRoot(path); }); }
+        return el;
+      };
+      crumbsEl.innerHTML = '';
+      crumbsEl.appendChild(mk('repo', '', parts.length === 0));
+      let acc = '';
+      parts.forEach((p, i) => {
+        acc = acc ? acc + '/' + p : p;
+        const sep = document.createElement('span'); sep.className = 'sep'; sep.textContent = '›';
+        crumbsEl.appendChild(sep);
+        crumbsEl.appendChild(mk(p, acc, i === parts.length - 1));
+      });
+    }
+
+    function reRoot(path) {
+      lens.reRoot(path);
+      compositor.fitView(lens.nodes);
+      fitScale = compositor.view.scale || 1;
+      updateZoom();
+      renderCrumbs();
+      raf.schedule();
+      updateInspector(null);
+    }
+
+    function updateInspector(node) {
+      if (!node) { insp.classList.remove('open'); return; }
+      inspName.textContent = node.name || '/';
+      inspPath.textContent = node.path || '(repo root)';
+      inspMeta.textContent = `${node.isDir ? 'directory' : 'file'} • depth ${node.depth} • ${node.cat}`;
+      if (node.note && (node.note.notes || node.note.status)) {
+        inspNote.style.display = 'block';
+        inspNote.textContent = (node.note.status ? `[${node.note.status}] ` : '') + (node.note.notes || '');
+      } else {
+        inspNote.style.display = 'none';
+      }
+      insp.classList.add('open');
+    }
+
+    // ---- interaction: drag to pan ----
+    let dragging = false, lastX = 0, lastY = 0, moved = 0;
+    canvas.addEventListener('pointerdown', (e) => {
+      canvas.setPointerCapture(e.pointerId);
+      dragging = true; lastX = e.clientX; lastY = e.clientY; moved = 0;
+    });
+    window.addEventListener('pointermove', (e) => {
+      if (!dragging) return;
+      const dx = e.clientX - lastX, dy = e.clientY - lastY;
+      moved += Math.abs(dx) + Math.abs(dy);
+      compositor.pan(dx, dy); lastX = e.clientX; lastY = e.clientY; updateZoom(); raf.schedule();
+    });
+    window.addEventListener('pointerup', () => { dragging = false; });
+
+    // ---- wheel: zoom at cursor ----
+    canvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const factor = e.deltaY < 0 ? 1.18 : 1 / 1.18;
+      wheelCount++; lastDelta = Math.round(e.deltaY);
+      compositor.zoomAt(e.clientX, e.clientY, factor);
+      updateZoom();
+      raf.schedule();
+    }, { passive: false });
+
+    // ---- click: hit-test -> lens.onClick (re-roots on directory, returns node on file) ----
+    canvas.addEventListener('click', (e) => {
+      if (moved > 4) return; // was a drag, not a click
+      const rect = canvas.getBoundingClientRect();
+      let hit = compositor.hitTest(e.clientX - rect.left, e.clientY - rect.top);
+      if (!hit) { updateInspector(null); return; }
+      const result = lens.onClick(hit); // null => re-rooted into a dir
+      if (result === null) {
+        compositor.fitView(lens.nodes); fitScale = compositor.view.scale || 1;
+        updateZoom(); renderCrumbs(); raf.schedule(); updateInspector(null);
+      } else updateInspector(result);
+    });
+
+    // ---- keyboard ----
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { updateInspector(null); return; }
+      if (e.key.toLowerCase() === 'r' || e.key === '0') { fitAll(); return; }
+      if (e.key === '+' || e.key === '=') { zoomBy(1.25); return; }
+      if (e.key === '-' || e.key === '_') { zoomBy(1 / 1.25); return; }
+      if (e.key === 'Backspace') {
+        e.preventDefault();
+        const root = lens.rootPath || '';
+        if (!root) return;
+        reRoot(root.includes('/') ? root.split('/').slice(0, -1).join('/') : '');
+      }
+    });
+
+    new ResizeObserver(() => { compositor.resize(); raf.schedule(); }).observe(canvas);
+    document.getElementById('insp-close').addEventListener('click', () => updateInspector(null));
+
+    // ---- controls ----
+    document.getElementById('btn-demo').addEventListener('click', () => load(makeDemo()));
+
+    const openBtn = document.getElementById('btn-open');
+    if (!window.showDirectoryPicker) {
+      openBtn.disabled = true;
+      openBtn.title = 'Open local repo needs a Chromium browser (File System Access API)';
+    }
+    openBtn.addEventListener('click', async () => {
+      try {
+        setStatus('opening local repo…');
+        const snap = await loadSnapshot('local-git');
+        try {
+          const rawNotes = await fetchNotes();
+          const prefix = `${snap.repoPath}/`;
+          snap.notes = {};
+          for (const [k, v] of Object.entries(rawNotes || {})) {
+            if (k.startsWith(prefix)) snap.notes[k.slice(prefix.length)] = v;
+          }
+        } catch (_) { snap.notes = snap.notes || {}; }
+        load(snap);
+      } catch (err) {
+        setStatus('open cancelled or failed: ' + (err && err.message ? err.message : err));
+      }
+    });
+
+    // ---- zoom controls (redundant with the wheel, so zoom never depends on it) ----
+    document.getElementById('zoom-in').addEventListener('click', () => zoomBy(1.25));
+    document.getElementById('zoom-out').addEventListener('click', () => zoomBy(1 / 1.25));
+    document.getElementById('zoom-fit').addEventListener('click', fitAll);
+
+    // debug handle: inspect the live camera from the console, e.g. __aytree.scale
+    window.__aytree = { compositor, lens, raf, get scale() { return compositor.view.scale; } };
+
+    // ---- boot with demo data so the lens is visible immediately ----
+    load(makeDemo());
+  </script>
+</body>
+</html>

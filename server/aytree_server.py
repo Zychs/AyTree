@@ -7,8 +7,14 @@ AyTree's server/ layout. Serves the visualizer and provides the notes DB, git
 enumeration, filesystem scan, and safe mutation endpoints.
 
 Run from the repo root:  python server/aytree_server.py
-The primary modular viz (index.html) is local-first (FS Access + logs); this
-server is the optional power layer and also serves the legacy monolith at /legacy.
+Primary experience (/, /legacy): the working tree + status + notes tool
+(legacy/index_tree.html) — this is the one that's actually usable day to day.
+Optional (/experimental, shell.html): four canvas visualization experiments
+(spatial-map, dag-gitgraph, radial-onion, weave) — worth exploring, not the default.
+Map view (/map, map.html): radial + directory dual projection of one RepoSnapshot.
+The original single-file canvas prototype (index.html) was culled 2026-07-09 — its
+weave curve rendered as a degenerate diagonal smear on real repos, unusable. See
+git history / legacy/harvest/harvested_raw.js for the source it was ported from.
 """
 import os
 import sys
@@ -220,12 +226,22 @@ class AyTreeRequestHandler(SimpleHTTPRequestHandler):
         # Router
         if path == "/api/tree":
             self.handle_get_tree()
-        elif path == "/" or path == "/index.html":
-            # Serve the modular AyTree shell
-            self.serve_file_or_fallback("index.html")
-        elif path == "/legacy" or path == "/legacy/":
-            # Serve the working monolith brought over from intuitree
+        elif path == "/api/notes":
+            self.handle_get_notes()
+        elif path == "/" or path == "/legacy" or path == "/legacy/":
+            # The real tool: file tree + per-item status + autosaved notes. Primary
+            # experience as of 2026-07-09 — it's the one that's actually usable, not an
+            # experiment. (Was previously tucked under /legacy only.)
             self.serve_file_or_fallback(os.path.join("legacy", "index_tree.html"))
+        elif path == "/experimental" or path == "/shell.html":
+            # The four canvas lenses (spatial-map, dag-gitgraph, radial-onion, weave) —
+            # visualization experiments, not a tool. Optional, not the default.
+            self.serve_file_or_fallback("shell.html")
+        elif path == "/map" or path == "/map.html":
+            # Dual radial + directory projection over one RepoSnapshot (lay of the land).
+            self.serve_file_or_fallback("map.html")
+        elif path == "/radial" or path == "/radial-onion.html":
+            self.serve_file_or_fallback("radial-onion.html")
         else:
             # Fallback to serving static files normally (from WEB_ROOT)
             super().do_GET()
@@ -264,6 +280,11 @@ class AyTreeRequestHandler(SimpleHTTPRequestHandler):
         self.send_header("Content-Length", str(len(response_data)))
         self.end_headers()
         self.wfile.write(response_data)
+
+    def handle_get_notes(self):
+        # Cheap read: just the small notes JSON, no filesystem walk (unlike /api/tree).
+        db = load_notes_db()
+        self.send_api_response(200, db.get("notes", {}))
 
     def handle_post_notes(self):
         content_length = int(self.headers.get('Content-Length', 0))
