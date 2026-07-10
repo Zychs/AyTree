@@ -47,19 +47,19 @@ Purpose: Provide an intuitive, reliable visualization and exploration interface 
 Efficient directory enumeration, scope-signal detection (folder/file names, content patterns), dynamic scope model updates, and non-intrusive tagging (`.aytree-index` metadata with timestamps, content hashes, and extracted scopes). Incremental read-triggered rescans remain active.
 
 **Interactive Radial Visualizer**
-Radial ("starburst") layout with central root node and radiating branches. Click-to-re-root behavior with dynamic remapping, pruning, and expansion of accessible branches. Relate Mode (SSOT anchoring) and Habit / Staged Fork Mode (parallel change paths) fully supported. Scope overlays and color-coded derivation lanes.
+Radial ("starburst") layout with central root node and radiating branches. Click-to-re-root behavior with dynamic remapping, pruning, and expansion of accessible branches. **STUB** — Relate Mode (SSOT anchoring) and Habit / Staged Fork Mode (parallel change paths) are speced (`docs/specs/radial-rerooting-spec.md`) but not built; the design doc defers both past MVP. Scope overlays and color-coded derivation lanes belong to the same deferred spec, not shipped code.
 
 **Split-View Sandboxing**
 Easy Split Mechanism: the visualizer window supports a one-action split into two synchronized or independent views within the same window (side-by-side panes or tabbed split).
 - Primary view: main workspace / current root and scope.
 - Secondary view: sandboxed remote or experimental context.
 
-Sandbox Abstraction: the secondary view operates as a lightweight, isolated sandbox (leveraging existing Sesefus constructs such as isolated worktrees, sidecar subagents, or constrained derivation lanes). This enables throw-away experiments (testing scope changes, branch re-rooting, or derivation hypotheses) without affecting the primary view or main repository state. Sandboxing is abstracted: users interact with it as a natural extension of the visualizer rather than a separate tool.
+Sandbox Abstraction: the secondary view is planned as a lightweight, isolated sandbox backed by real primitives — an in-memory `RepoSnapshot` fork today, git worktrees if adopted later (see `docs/VERSIONING.md` §4). This enables throw-away experiments (testing scope changes, branch re-rooting, or derivation hypotheses) without affecting the primary view or main repository state. Sandboxing is abstracted: users interact with it as a natural extension of the visualizer rather than a separate tool. **Status: doc-only, zero code** — see `docs/ghm2-development-plan.md` Phase C.
 
 Gating and Persistence: the split window remains open and active until the sandbox explicitly returns a commit (merging validated changes back into the primary scope or a staged fork) or an omit (discarding the experimental changes cleanly). This gating ensures workflow continuity — no premature closure — while preventing resource leakage or unintended state pollution. User capabilities remain fully intact: the primary view continues normal operations (navigation, scope adjustments, indexing) during sandbox engagement.
 
 **Unified Data and Persistence Model**
-Index and tags are shared where appropriate but isolated for the sandbox pane. Integration with derivation-priority-guardian for safe sidecar execution during experiments. Compatibility with Git worktrees, INDEX junctions, SSOT hygiene, and archive relocation patterns.
+Index and tags are shared where appropriate but isolated for the sandbox pane. Compatibility target: Git worktrees and the suite's `drive-mapping.json` SSOT convention (`sesefus/docs/CANON.md` §6) for any archive relocation. (A generic "derivation-priority-guardian" service and "INDEX junctions," named in earlier drafts of this section, have no referent anywhere in the suite — dropped rather than left to imply a system that doesn't exist.)
 
 ### Benefits and Alignment with Sesefus Vision
 

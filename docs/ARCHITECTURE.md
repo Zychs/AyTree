@@ -6,7 +6,8 @@ prototype evolved forward.*
 
 Status: **Phase 1 in progress.** `src/model/`, `src/compositor/`, `src/ingest/local-git.js`,
 and the `spatial-map` lens are implemented and wired into `shell.html`. `dag-gitgraph.js`,
-`radial-onion.js`, `weave.js`, and `python-scan.js` remain stubs — see §4.
+`weave.js`, and `python-scan.js` are **STUB** (no real logic, throw on call).
+`radial-onion.js` is **DEAD** — 274 lines of real layout code that no shell imports — see §4.
 
 ---
 
@@ -134,7 +135,14 @@ hit-targets,encode}.js`; `src/ingest/{local-git,picker}.js` (real `.git/logs` re
 not a stub); `src/lenses/spatial-map.js`; `shell.html` booting picker → ingest → snapshot →
 compositor → spatial-map end to end.
 
-**Deferred (stub files present, citing CATALOG.md disposition):** `dag-gitgraph.js`,
-`radial-onion.js`, the `weave.js` overlay, `python-scan.js`, the worker/off-thread indexer,
-split-view sandboxing + commit/omit gating (see root `README.md`), LOD controller wiring,
-editing/virtual-node operations (`index_tree.html`).
+**Deferred — STUB (no real logic yet):** `dag-gitgraph.js`, the `weave.js` overlay,
+`python-scan.js`, the worker/off-thread indexer, LOD controller wiring, editing/virtual-node
+operations (`index_tree.html`).
+
+**Deferred — DEAD (real logic, unreachable):** `radial-onion.js` — a complete 6-step layout
+pipeline (`RadialOnionLens`), never imported by `shell.html` or `index.html`. Wiring it in is
+a shell-side change, not a rewrite.
+
+**Deferred — doc-only (no code at all, not even a stub):** split-view sandboxing +
+commit/omit gating (see root `README.md`; tracked in `docs/VERSIONING.md` and
+`docs/ghm2-development-plan.md` Phase C).

@@ -89,7 +89,13 @@ The new feature branch will unify these threads into a cohesive, interactive exp
 - Legend: Updated from existing intuittree to include new node types (SSOT base, staged fork, re-root target, etc.).
 
 ### Styling & Theme
-- Dark professional theme consistent with terminal screenshots and prior visualizations (`#0d1117` background, high-contrast accents).
+
+> **Superseded (KD-16):** the warm-paper DyslexiUI palette (`docs/dyslexia-encoding.md`) is
+> canonical for this lens, not the dark theme below. Radial-onion inherits the shape/weight/
+> position glyph language from that spec; it does not inherit `#0d1117`. See
+> `docs/dyslexistree-design-6c22687c.md:432`.
+
+- ~~Dark professional theme consistent with terminal screenshots and prior visualizations (`#0d1117` background, high-contrast accents).~~ Superseded — see note above.
 - Color coding:
   - Root / focus: Bright blue (`#58a6ff`)
   - Main SSOT / Relate: Warm gold/orange
